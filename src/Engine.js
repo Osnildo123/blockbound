@@ -690,7 +690,7 @@ export class MinecraftEngine {
         }
     }
 
-    setBlockModified(x, y, z, type, forceRot = null) {
+    setBlockModified(x, y, z, type, forceRot = null, isRemote = false) {
         const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
         const key = `${ix},${iy},${iz}`;
         
@@ -698,28 +698,25 @@ export class MinecraftEngine {
         this.modifiedBlocks.set(key, type);
         this.applyBlockLight(ix, iy, iz, type);
 
-        let doorRot = forceRot; // Utiliza a rotação recebida da rede, se existir
+        let doorRot = forceRot; 
         
         const isDoor = (type === 8 || (typeof BLOCKS !== 'undefined' && type === BLOCKS.DOOR));
 
-        // Se for uma porta colocada localmente pelo jogador
-        if (isDoor && doorRot === null) {
+        // Só calcula o ângulo da câmara se for uma porta E se foi colocada pelo próprio jogador local
+        if (isDoor && !isRemote) {
             const dir = new THREE.Vector3();
             this.camera.getWorldDirection(dir);
-            
-            // + (Math.PI / 2) compensa o desvio de 90 graus do modelo 3D
             const angle = Math.atan2(dir.x, dir.z) + (Math.PI / 2);
             doorRot = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
         }
 
-        // Armazena a rotação ajustada na memória
         if (isDoor) {
             if (!window.DoorRotationMemory) window.DoorRotationMemory = new Map();
             window.DoorRotationMemory.set(key, doorRot);
         }
 
-        // Transmite para a rede se tiver sido gerado localmente
-        if (forceRot === null) {
+        // A MAGIA: Só envia para a rede se a ação NÃO for remota. Acabou o loop infinito!
+        if (!isRemote) {
             this.network.sendBlock(ix, iy, iz, type, doorRot);
         }
     }
@@ -2278,13 +2275,11 @@ spawnNightMobs(delta) {
     }
 
     applyRemoteBlock(x, y, z, blockType, rotY = null) {
-        // Agora passamos o rotY como o 5º parâmetro! O setBlockModified vai ser forçado a obedecer!
-        this.setBlockModified(x, y, z, blockType, rotY);
+        // Passamos o 'true' no 6º parâmetro. Isto grita para a função: "ESTE BLOCO VEIO DA REDE, NÃO O DEVOLVAS!"
+        this.setBlockModified(x, y, z, blockType, rotY, true);
         
-        // Reconstrói o bloco visualmente
         this.rebuildChunkAtBlock(x, y, z);
         
-        // Se for uma porta, garante que o modelo 3D é gerado com a rotação certa
         const isDoor = (blockType === 8 || (typeof BLOCKS !== 'undefined' && blockType === BLOCKS.DOOR));
         if (isDoor && rotY !== null && rotY !== undefined) {
             const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
