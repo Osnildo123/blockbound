@@ -258,13 +258,11 @@ export class MinecraftEngine {
     takePlayerDamage(damage, sourceName = "Ataque", knockbackDir = null) {
         const agora = performance.now();
 
-        // Garante 1 segundo de intervalo entre recebimentos de dano
         if (this.lastDamageTime && (agora - this.lastDamageTime < 1000)) {
             return;
         }
         this.lastDamageTime = agora;
 
-        // Se o dano for por afogamento, garante 15 HP de dano por segundo
         const isDrowning = sourceName.toLowerCase().includes('afogamento') || sourceName.toLowerCase().includes('água');
         const finalDamage = isDrowning ? Math.max(damage, 15) : damage;
 
@@ -273,7 +271,6 @@ export class MinecraftEngine {
         if (typeof this.triggerDamageFlash === 'function') this.triggerDamageFlash();
         this.notify(`💥 Dano de ${sourceName}! -${finalDamage} HP`);
 
-        // Só aplica empurrão (knockback) se não for afogamento
         if (knockbackDir && !isDrowning) {
             this.velocity.x += knockbackDir.x * 12.0;
             this.velocity.y += 5.0;
@@ -286,7 +283,7 @@ export class MinecraftEngine {
             this.findSafeSpawn();
             this.hp = 100;
             this.hunger = 100;
-            if (typeof this.air !== 'undefined') this.air = 100; // Restaura oxigénio ao reaparecer
+            if (typeof this.air !== 'undefined') this.air = 100;
         }
         this.updateUI();
     }
@@ -677,10 +674,8 @@ export class MinecraftEngine {
             return Math.abs(x - Math.floor(x));
         };
 
-        // Array atualizado com todas as espécies (Peixe-palhaço, Salmão, Azul, Bacalhau, Baiacu e Tartaruga)
         const types = ['clown', 'salmon', 'blue', 'cod', 'pufferfish', 'turtle'];
         
-        // Quantidade ajustada para 24 para povoar melhor os oceanos com a nova diversidade
         for (let i = 0; i < 24; i++) {
             const rx = (random() - 0.5) * 60;
             const rz = (random() - 0.5) * 60;
@@ -702,7 +697,6 @@ export class MinecraftEngine {
         
         const isDoor = (type === 8 || (typeof BLOCKS !== 'undefined' && type === BLOCKS.DOOR));
 
-        // Só calcula o ângulo da câmara se for uma porta E se foi colocada pelo próprio jogador local
         if (isDoor && !isRemote) {
             const dir = new THREE.Vector3();
             this.camera.getWorldDirection(dir);
@@ -715,7 +709,6 @@ export class MinecraftEngine {
             window.DoorRotationMemory.set(key, doorRot);
         }
 
-        // A MAGIA: Só envia para a rede se a ação NÃO for remota. Acabou o loop infinito!
         if (!isRemote) {
             this.network.sendBlock(ix, iy, iz, type, doorRot);
         }
@@ -1050,7 +1043,6 @@ export class MinecraftEngine {
         parentGroup.position.set(x + 0.5, y, z + 0.5);
         parentGroup.rotation.y = rot;
 
-        // 1. A DOBRADIÇA VAI PARA O OUTRO LADO (+0.48 em vez de -0.48)
         const doorGroup = new THREE_REF.Group();
         doorGroup.position.set(-0.44, 0, 0.48);
 
@@ -1073,12 +1065,10 @@ export class MinecraftEngine {
         const mesh = new THREE_REF.Mesh(doorGeo, doorMat);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        // 2. A malha compensa a diferença indo na direção inversa (-0.48)
         mesh.position.set(0.06, 1.0, -0.48);
 
         doorGroup.add(mesh);
         
-        // 3. A porta agora roda com ângulo POSITIVO para continuar a abrir para a frente
         doorGroup.rotation.y = open ? Math.PI / 2 : 0;
 
         parentGroup.add(doorGroup);
@@ -1093,7 +1083,6 @@ export class MinecraftEngine {
         });
     }
 
-    // 1. Roda no HOST: Prepara um pacote com todas as portas do mapa
     exportDoorsForNewPlayer() {
         const doorsData = [];
         if (this.doorMeshes) {
@@ -1111,18 +1100,13 @@ export class MinecraftEngine {
         return doorsData;
     }
 
-    // 2. Roda no CLIENTE NOVO: Recebe o pacote, guarda na memória e desenha no cenário
     importDoorsFromHost(doorsData) {
         if (!doorsData || doorsData.length === 0) return;
         if (!window.DoorRotationMemory) window.DoorRotationMemory = new Map();
         
         doorsData.forEach(door => {
             const key = `${door.x},${door.y},${door.z}`;
-            
-            // 1. Alimenta a memória cega do cliente novo para ele saber as direções
             window.DoorRotationMemory.set(key, door.rot);
-            
-            // 2. Desenha a malha 3D da porta exatamente como estava no Host
             this.createDoorMesh(door.x, door.y, door.z, door.rot, door.isOpen);
         });
     }
@@ -1131,7 +1115,6 @@ export class MinecraftEngine {
         const key = `${x},${y},${z}`;
         if (this.doorMeshes.has(key)) {
             const d = this.doorMeshes.get(key);
-            // Destrói a base principal em vez de destruir só a dobradiça
             const root = d.parentGroup || d.group;
             this.scene.remove(root);
             root.traverse((child) => {
@@ -1208,7 +1191,7 @@ export class MinecraftEngine {
         }
     }
 
-spawnNightMobs(delta) {
+    spawnNightMobs(delta) {
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
         if (isClientLAN) return;
 
@@ -1220,18 +1203,15 @@ spawnNightMobs(delta) {
             if (this.nightSpawnTimer <= 0 && hostileCount < 6) {
                 this.nightSpawnTimer = 5.0;
 
-                // Tenta até 10 vezes encontrar uma posição natural longe de todos os jogadores
                 for (let attempt = 0; attempt < 10; attempt++) {
                     const angle = Math.random() * Math.PI * 2;
-                    const dist = 24 + Math.random() * 22; // Raio natural entre 24 e 46 blocos
+                    const dist = 24 + Math.random() * 22;
                     const rx = this.position.x + Math.sin(angle) * dist;
                     const rz = this.position.z + Math.cos(angle) * dist;
                     const ry = this.getHighestBlockY(rx, rz);
 
-                    // Evita spawn na água
                     if (ry <= 11) continue;
 
-                    // Garante distância segura de pelo menos 22 blocos de QUALQUER jogador
                     const spawnVec = new THREE.Vector3(rx, ry + 1, rz);
                     let tooCloseToAnyPlayer = spawnVec.distanceTo(this.position) < 22;
 
@@ -1310,12 +1290,11 @@ spawnNightMobs(delta) {
         }, true);
 
         document.addEventListener('keydown', (e) => {
-            // VERIFICA SE O CHAT ESTÁ ABERTO PARA BLOQUEAR OS ATALHOS DO JOGO
             const chatInput = document.getElementById('chat-input');
             const isChatActive = chatInput && chatInput.style.display === 'block';
 
             if (isChatActive) {
-                return; // Ignora inventário (E), seleção de slots (1-9) e atalhos enquanto digita
+                return;
             }
 
             if (e.code === 'KeyT') {
@@ -1408,7 +1387,6 @@ spawnNightMobs(delta) {
             const screenEl = document.getElementById(id);
             if (screenEl) {
                 screenEl.addEventListener('click', (e) => {
-                    // Se clicou diretamente no fundo escuro (fora de uma janela/slot)
                     if (e.target === screenEl) {
                         this.dropDraggedItem();
                     }
@@ -1432,7 +1410,11 @@ spawnNightMobs(delta) {
                 slot.className = `slot ${i === 0 ? 'active' : ''}`;
                 slot.id = `slot-${i}`;
                 slot.innerHTML = `<span class="slot-num">${i+1}</span><div class="slot-icon"></div><span class="slot-count"></span>`;
-                slot.addEventListener('click', () => this.handleSlotClick('hotbar', i));
+                slot.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.handleSlotClickUnified('hotbar', i, e.button === 2);
+                });
+                slot.addEventListener('contextmenu', (e) => e.preventDefault());
                 hotbarEl.appendChild(slot);
             }
         }
@@ -1445,7 +1427,11 @@ spawnNightMobs(delta) {
                 slot.className = 'gui-slot';
                 slot.id = `inv-${i}`;
                 slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
-                slot.addEventListener('click', () => this.handleSlotClick('inv', i));
+                slot.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.handleSlotClickUnified('inv', i, e.button === 2);
+                });
+                slot.addEventListener('contextmenu', (e) => e.preventDefault());
                 invGrid.appendChild(slot);
             }
         }
@@ -1458,7 +1444,11 @@ spawnNightMobs(delta) {
                 slot.className = 'gui-slot';
                 slot.id = `gui-hotbar-${i}`;
                 slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
-                slot.addEventListener('click', () => this.handleSlotClick('hotbar', i));
+                slot.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.handleSlotClickUnified('hotbar', i, e.button === 2);
+                });
+                slot.addEventListener('contextmenu', (e) => e.preventDefault());
                 invHotbarGrid.appendChild(slot);
             }
         }
@@ -1466,12 +1456,16 @@ spawnNightMobs(delta) {
         for (let i = 0; i < 4; i++) {
             const craftEl = document.getElementById(`craft-${i}`);
             if (craftEl) {
-                craftEl.addEventListener('click', () => this.handleCraftSlotClick(i));
+                craftEl.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.handleSlotClickUnified('craft', i, e.button === 2);
+                });
+                craftEl.addEventListener('contextmenu', (e) => e.preventDefault());
             }
         }
         const craftResEl = document.getElementById('craft-result');
         if (craftResEl) {
-            craftResEl.addEventListener('click', () => this.takeCraftResult());
+            craftResEl.onclick = () => this.takeCraftResult();
         }
 
         this.initChatUI();
@@ -1485,210 +1479,11 @@ spawnNightMobs(delta) {
             const slot = document.createElement('div');
             slot.className = 'gui-slot';
             slot.id = `craft3x3-slot-${i}`;
-            slot.addEventListener('click', () => this.handleCraft3x3SlotClick(i));
-            grid.appendChild(slot);
-        }
-
-        const invGrid = document.getElementById('craft3x3-inv-grid');
-        invGrid.innerHTML = '';
-        for (let i = 0; i < 27; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'gui-slot';
-            slot.id = `craft3x3-inv-${i}`;
-            slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
-            slot.addEventListener('click', () => this.handleSlotClickUnified('inv', i));
-            invGrid.appendChild(slot);
-        }
-
-        document.getElementById('craft3x3-result').onclick = () => this.takeCraft3x3Result();
-
-        this.updateCraftingTableUI();
-        document.getElementById('crafting-table-screen').style.display = 'flex';
-        this.controls.unlock();
-    }
-
-    handleCraft3x3SlotClick(index, isRightClick = false) {
-        const floatItem = document.getElementById('floating-item');
-
-        if (this.draggedSlot) {
-            const held = this.draggedSlot.item;
-            const target = this.crafting3x3Slots[index];
-
-            if (isRightClick) {
-                // CLIQUE DIREITO: Deposita Apenas 1 Item
-                if (!target) {
-                    this.crafting3x3Slots[index] = { id: held.id, count: 1 };
-                    held.count--;
-                } else if (target.id === held.id && target.count < 64) {
-                    target.count++;
-                    held.count--;
-                }
-
-                if (held.count <= 0) {
-                    this.draggedSlot = null;
-                    if (floatItem) floatItem.style.display = 'none';
-                }
-            } else {
-                // CLIQUE ESQUERDO: Deposita A PILHA INTEIRA ou Empilha
-                if (!target) {
-                    this.crafting3x3Slots[index] = { ...held };
-                    this.draggedSlot = null;
-                    if (floatItem) floatItem.style.display = 'none';
-                } else if (target.id === held.id) {
-                    const space = 64 - target.count;
-                    const add = Math.min(space, held.count);
-                    target.count += add;
-                    held.count -= add;
-
-                    if (held.count <= 0) {
-                        this.draggedSlot = null;
-                        if (floatItem) floatItem.style.display = 'none';
-                    }
-                } else {
-                    // Troca os itens de lugar
-                    const temp = this.crafting3x3Slots[index];
-                    this.crafting3x3Slots[index] = held;
-                    this.draggedSlot = { type: 'craft3x3', index, item: temp };
-                    if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
-                }
-            }
-        } else {
-            // Se a mão estiver vazia
-            const target = this.crafting3x3Slots[index];
-            if (target) {
-                if (isRightClick && target.count > 1) {
-                    // CLIQUE DIREITO COM MÃO VAZIA: Pega Metade da Pilha
-                    const half = Math.ceil(target.count / 2);
-                    this.draggedSlot = { type: 'craft3x3', index, item: { id: target.id, count: half } };
-                    target.count -= half;
-                } else {
-                    // CLIQUE ESQUERDO COM MÃO VAZIA: Pega a Pilha Toda
-                    this.draggedSlot = { type: 'craft3x3', index, item: { ...target } };
-                    this.crafting3x3Slots[index] = null;
-                }
-
-                if (floatItem) {
-                    floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                    floatItem.style.display = 'block';
-                }
-            }
-        }
-
-        this.checkCrafting3x3();
-        this.updateCraftingTableUI();
-    }
-
-    checkCrafting3x3() {
-        const items = this.crafting3x3Slots.filter(s => s !== null);
-        if (items.length === 0) {
-            this.craft3x3Result = null;
-            return;
-        }
-
-        const ids = items.map(i => i.id);
-
-        // RECEITA 1: 1 Tronco de Madeira -> 4 Tábuas
-        if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
-            this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
-            return;
-        }
-
-        // RECEITA 2: 2 Tábuas -> 4 Tochas
-        if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
-            this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
-            return;
-        }
-
-        // RECEITA 3: 4 Tábuas -> Bancada de Trabalho
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
-            this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
-            return;
-        }
-
-        // RECEITA 4: 4 Pedregulhos -> 4 Pedras Polidas
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
-            this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
-            return;
-        }
-
-        // RECEITA 5: 8 Tábuas ao redor -> Baú
-        if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
-            this.craft3x3Result = { id: BLOCKS.CHEST, count: 1 };
-            return;
-        }
-
-        // RECEITA 6: Picareta de Diamante
-        if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[4]?.id === BLOCKS.PLANK &&
-            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 5) {
-            this.craft3x3Result = { id: BLOCKS.DIAMOND_PICKAXE, count: 1 };
-            return;
-        }
-
-        // RECEITA 7: Espada de Diamante
-        if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
-            this.craft3x3Result = { id: BLOCKS.DIAMOND_SWORD, count: 1 };
-            return;
-        }
-
-        this.craft3x3Result = null;
-    }
-
-    takeCraft3x3Result() {
-        if (!this.craft3x3Result) return;
-
-        const result = this.craft3x3Result;
-        const floatItem = document.getElementById('floating-item');
-
-        // 1. Verifica se pode pegar na mão ou empilhar na mão
-        if (!this.draggedSlot) {
-            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
-        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
-            this.draggedSlot.item.count += result.count;
-        } else {
-            return; // Mão ocupada com outro item ou pilha cheia
-        }
-
-        // 2. Consome 1 unidade de cada ingrediente presente na grelha 3x3
-        for (let i = 0; i < 9; i++) {
-            if (this.crafting3x3Slots[i]) {
-                this.crafting3x3Slots[i].count--;
-                if (this.crafting3x3Slots[i].count <= 0) {
-                    this.crafting3x3Slots[i] = null;
-                }
-            }
-        }
-
-        // 3. Atualiza o item a flutuar na mão
-        if (floatItem) {
-            floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-            floatItem.style.display = 'block';
-        }
-
-        // 4. Re-verifica a receita para saber se ainda sobram troncos na mesa
-        this.checkCrafting3x3();
-        this.updateCraftingTableUI();
-        if (this.sound) this.sound.playPlace();
-    }
-
-    openCraftingTableGUI() {
-        const grid = document.getElementById('craft3x3-grid');
-        grid.innerHTML = '';
-        for (let i = 0; i < 9; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'gui-slot';
-            slot.id = `craft3x3-slot-${i}`;
-            // Adicionado icon e count para exibir números dentro da bancada 3x3
             slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
             
-            // Botão Esquerdo = Coloca pilha inteira / Botão Direito = Coloca apenas 1 item
             slot.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                this.handleCraft3x3SlotClick(i, e.button === 2);
+                this.handleSlotClickUnified('craft3x3', i, e.button === 2);
             });
             slot.addEventListener('contextmenu', (e) => e.preventDefault());
             grid.appendChild(slot);
@@ -1716,8 +1511,93 @@ spawnNightMobs(delta) {
         this.controls.unlock();
     }
 
+    checkCrafting3x3() {
+        const items = this.crafting3x3Slots.filter(s => s !== null);
+        if (items.length === 0) {
+            this.craft3x3Result = null;
+            return;
+        }
+
+        const ids = items.map(i => i.id);
+
+        if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
+            this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
+            return;
+        }
+
+        if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
+            this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
+            return;
+        }
+
+        if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
+            this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
+            return;
+        }
+
+        if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
+            this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
+            return;
+        }
+
+        if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
+            this.craft3x3Result = { id: BLOCKS.CHEST, count: 1 };
+            return;
+        }
+
+        if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
+            this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
+            this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
+            this.crafting3x3Slots[4]?.id === BLOCKS.PLANK &&
+            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 5) {
+            this.craft3x3Result = { id: BLOCKS.DIAMOND_PICKAXE, count: 1 };
+            return;
+        }
+
+        if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
+            this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
+            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
+            this.craft3x3Result = { id: BLOCKS.DIAMOND_SWORD, count: 1 };
+            return;
+        }
+
+        this.craft3x3Result = null;
+    }
+
+    takeCraft3x3Result() {
+        if (!this.craft3x3Result) return;
+
+        const result = this.craft3x3Result;
+        const floatItem = document.getElementById('floating-item');
+
+        if (!this.draggedSlot) {
+            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
+        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
+            this.draggedSlot.item.count += result.count;
+        } else {
+            return;
+        }
+
+        for (let i = 0; i < 9; i++) {
+            if (this.crafting3x3Slots[i]) {
+                this.crafting3x3Slots[i].count--;
+                if (this.crafting3x3Slots[i].count <= 0) {
+                    this.crafting3x3Slots[i] = null;
+                }
+            }
+        }
+
+        if (floatItem) {
+            floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+            floatItem.style.display = 'block';
+        }
+
+        this.checkCrafting3x3();
+        this.updateCraftingTableUI();
+        if (this.sound) this.sound.playPlace();
+    }
+
     updateCraftingTableUI() {
-        // Atualiza os 9 slots da bancada 3x3 com ícone E quantidade
         for (let i = 0; i < 9; i++) {
             const slot = document.getElementById(`craft3x3-slot-${i}`);
             if (!slot) continue;
@@ -1727,14 +1607,15 @@ spawnNightMobs(delta) {
 
             if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
                 if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
                 if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
             } else {
                 if (iconEl) iconEl.style.backgroundImage = 'none';
+                else slot.style.backgroundImage = 'none';
                 if (countEl) countEl.innerText = '';
             }
         }
 
-        // Atualiza o resultado da bancada
         const resSlot = document.getElementById('craft3x3-result');
         if (resSlot) {
             if (this.craft3x3Result && BLOCK_ICONS[this.craft3x3Result.id]) {
@@ -1745,7 +1626,6 @@ spawnNightMobs(delta) {
             }
         }
 
-        // Atualiza o inventário inferior da janela
         for (let i = 0; i < 27; i++) {
             const slot = document.getElementById(`craft3x3-inv-${i}`);
             if (!slot) continue;
@@ -1761,30 +1641,6 @@ spawnNightMobs(delta) {
                 if (countEl) countEl.innerText = '';
             }
         }
-        this.updateUI();
-    }
-
-    handleCraftSlotClick(index) {
-        const floatItem = document.getElementById('floating-item');
-
-        if (this.draggedSlot) {
-            if (!this.craftingSlots[index]) {
-                this.craftingSlots[index] = { id: this.draggedSlot.item.id, count: 1 };
-                this.draggedSlot.item.count--;
-                if (this.draggedSlot.item.count <= 0) {
-                    this.draggedSlot = null;
-                    floatItem.style.display = 'none';
-                }
-            }
-        } else {
-            if (this.craftingSlots[index]) {
-                this.draggedSlot = { type: 'craft', index, item: { ...this.craftingSlots[index] } };
-                this.craftingSlots[index] = null;
-                floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                floatItem.style.display = 'block';
-            }
-        }
-        this.checkCrafting();
         this.updateUI();
     }
 
@@ -1826,47 +1682,67 @@ spawnNightMobs(delta) {
     }
 
     takeCraftResult() {
-        if (this.craftResult) {
-            this.addToInventory(this.craftResult.id, this.craftResult.count);
-            for (let i = 0; i < 4; i++) {
-                if (this.craftingSlots[i]) {
-                    this.craftingSlots[i].count--;
-                    if (this.craftingSlots[i].count <= 0) {
-                        this.craftingSlots[i] = null;
-                    }
+        if (!this.craftResult) return;
+
+        const result = this.craftResult;
+        const floatItem = document.getElementById('floating-item');
+
+        if (!this.draggedSlot) {
+            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
+        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
+            this.draggedSlot.item.count += result.count;
+        } else {
+            return;
+        }
+
+        for (let i = 0; i < 4; i++) {
+            if (this.craftingSlots[i]) {
+                this.craftingSlots[i].count--;
+                if (this.craftingSlots[i].count <= 0) {
+                    this.craftingSlots[i] = null;
                 }
             }
-            this.checkCrafting();
-            this.updateUI();
-            this.notify("Item Fabricado!");
         }
+
+        if (floatItem) {
+            floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+            floatItem.style.display = 'block';
+        }
+
+        this.checkCrafting();
+        this.updateUI();
+        if (this.sound) this.sound.playPlace();
+    }
+
+    getSourceList(type) {
+        if (type === 'chest') return this.chestData.get(this.activeChestKey);
+        if (type === 'hotbar') return this.hotbarSlots;
+        if (type === 'inv') return this.inventorySlots;
+        if (type === 'craft') return this.craftingSlots;
+        if (type === 'craft3x3') return this.crafting3x3Slots;
+        return null;
     }
 
     handleSlotClick(type, index) {
-        this.handleSlotClickUnified(type, index);
+        this.handleSlotClickUnified(type, index, false);
     }
 
     handleSlotClickUnified(listType, index, isRightClick = false) {
-        let targetList;
-        if (listType === 'chest') targetList = this.chestData.get(this.activeChestKey);
-        else if (listType === 'hotbar') targetList = this.hotbarSlots;
-        else targetList = this.inventorySlots;
-
+        const targetList = this.getSourceList(listType);
         if (!targetList) return;
 
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot === null) {
-            // PEGAR ITEM
             const item = targetList[index];
             if (item && item.count > 0) {
-                if (isRightClick && item.count > 1) {
-                    // Clique direito pega metade
-                    const half = Math.ceil(item.count / 2);
-                    this.draggedSlot = { type: listType, index, item: { id: item.id, count: half } };
-                    item.count -= half;
+                if (isRightClick) {
+                    this.draggedSlot = { type: listType, index, item: { id: item.id, count: 1 } };
+                    item.count--;
+                    if (item.count <= 0) {
+                        targetList[index] = null;
+                    }
                 } else {
-                    // Clique esquerdo pega tudo
                     this.draggedSlot = { type: listType, index, item: { ...item } };
                     targetList[index] = null;
                 }
@@ -1877,12 +1753,10 @@ spawnNightMobs(delta) {
                 }
             }
         } else {
-            // LARGAR / EMPILHAR
             const targetItem = targetList[index];
             const held = this.draggedSlot.item;
 
             if (isRightClick) {
-                // Clique direito deposita 1 por 1
                 if (!targetItem) {
                     targetList[index] = { id: held.id, count: 1 };
                     held.count--;
@@ -1896,7 +1770,6 @@ spawnNightMobs(delta) {
                     if (floatItem) floatItem.style.display = 'none';
                 }
             } else {
-                // Clique esquerdo deposita tudo / empilha
                 if (!targetItem) {
                     targetList[index] = held;
                     this.draggedSlot = null;
@@ -1912,17 +1785,33 @@ spawnNightMobs(delta) {
                         if (floatItem) floatItem.style.display = 'none';
                     }
                 } else {
-                    // Troca os dois itens
-                    const temp = targetList[index];
-                    targetList[index] = held;
-                    this.draggedSlot = { type: listType, index, item: temp };
-                    if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                    const sourceList = this.getSourceList(this.draggedSlot.type);
+                    if (sourceList) {
+                        const temp = targetList[index];
+                        targetList[index] = held;
+                        sourceList[this.draggedSlot.index] = temp;
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    } else {
+                        const temp = targetList[index];
+                        targetList[index] = held;
+                        this.draggedSlot = { type: listType, index, item: temp };
+                        if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                    }
                 }
             }
         }
 
+        if (listType === 'craft' || this.draggedSlot?.type === 'craft') this.checkCrafting();
+        if (listType === 'craft3x3' || this.draggedSlot?.type === 'craft3x3') this.checkCrafting3x3();
+
+        if (this.activeChestKey && (listType === 'chest' || this.draggedSlot?.type === 'chest')) {
+            this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
+        }
+
         this.updateUI();
         if (this.activeChestKey) this.updateChestUI();
+        this.updateCraftingTableUI();
     }
 
     selectSlot(idx) {
@@ -2007,11 +1896,18 @@ spawnNightMobs(delta) {
             const slot = document.getElementById(`craft-${i}`);
             if (!slot) continue;
             const item = this.craftingSlots[i];
-            if (item && BLOCK_ICONS[item.id]) {
-                slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+            const iconEl = slot.querySelector('.slot-icon');
+            const countEl = slot.querySelector('.slot-count');
+
+            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
                 slot.style.backgroundSize = 'cover';
             } else {
-                slot.style.backgroundImage = 'none';
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                else slot.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
             }
         }
 
@@ -2479,7 +2375,6 @@ spawnNightMobs(delta) {
     }
 
     applyRemoteBlock(x, y, z, blockType, rotY = null) {
-        // Passamos o 'true' no 6º parâmetro. Isto grita para a função: "ESTE BLOCO VEIO DA REDE, NÃO O DEVOLVAS!"
         this.setBlockModified(x, y, z, blockType, rotY, true);
         
         this.rebuildChunkAtBlock(x, y, z);
@@ -2615,11 +2510,8 @@ spawnNightMobs(delta) {
 
     handleSecondaryAction() {
         const item = this.hotbarSlots[this.selectedSlot];
-
-        // 1. Declaración oĩva'erã tenondete ojepuru mboyve
         const target = this.getTargetBlock();
 
-        // 2. Tembi'u (Comida)
         if (item && BLOCK_TILES[item.id]?.food) {
             const info = BLOCK_TILES[item.id];
             this.hunger = Math.min(100, this.hunger + info.healHunger);
@@ -2631,15 +2523,11 @@ spawnNightMobs(delta) {
             return;
         }
 
-        // 3. Okẽ (Abrir / Fechar porta)
-        // Interação com a porta (Abrir/Fechar)
         if (target && target.isDoor) {
             if (this.doorMeshes.has(target.doorKey)) {
                 const d = this.doorMeshes.get(target.doorKey);
                 const newState = !d.isOpen;
                 d.isOpen = newState;
-                
-                // ATUALIZADO: Agora usa valor positivo para abrir acompanhando a dobradiça certa
                 d.targetRot = newState ? Math.PI / 2 : 0;
                 
                 this.network.sendToggleDoor(target.doorKey, newState);
@@ -2649,7 +2537,6 @@ spawnNightMobs(delta) {
             return;
         }
 
-        // 4. Ambue mba'e (Baús, Crafting, Fogueira)
         if (target && target.breakPos) {
             const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
             const targetType = this.getBlock(bx, by, bz);
@@ -2684,7 +2571,6 @@ spawnNightMobs(delta) {
             }
         }
 
-        // 5. Omohenda blocos (Place block)
         this.placeBlock();
     }
 
@@ -2701,7 +2587,11 @@ spawnNightMobs(delta) {
             slot.className = 'gui-slot';
             slot.id = `cslot-${i}`;
             slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
-            slot.addEventListener('click', () => this.handleSlotClickUnified('chest', i));
+            slot.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.handleSlotClickUnified('chest', i, e.button === 2);
+            });
+            slot.addEventListener('contextmenu', (e) => e.preventDefault());
             chestGrid.appendChild(slot);
         }
 
@@ -2712,7 +2602,11 @@ spawnNightMobs(delta) {
             slot.className = 'gui-slot';
             slot.id = `cinv-${i}`;
             slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
-            slot.addEventListener('click', () => this.handleSlotClickUnified('inv', i));
+            slot.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.handleSlotClickUnified('inv', i, e.button === 2);
+            });
+            slot.addEventListener('contextmenu', (e) => e.preventDefault());
             chestInvGrid.appendChild(slot);
         }
 
@@ -2721,43 +2615,104 @@ spawnNightMobs(delta) {
         this.controls.unlock();
     }
 
-    handleSlotClickUnified(listType, index) {
-        let targetList;
-        if (listType === 'chest') targetList = this.chestData.get(this.activeChestKey);
-        else if (listType === 'hotbar') targetList = this.hotbarSlots;
-        else targetList = this.inventorySlots;
+    getSourceList(type) {
+        if (type === 'chest') return this.chestData.get(this.activeChestKey);
+        if (type === 'hotbar') return this.hotbarSlots;
+        if (type === 'inv') return this.inventorySlots;
+        if (type === 'craft') return this.craftingSlots;
+        if (type === 'craft3x3') return this.crafting3x3Slots;
+        return null;
+    }
+
+    handleSlotClick(type, index) {
+        this.handleSlotClickUnified(type, index, false);
+    }
+
+    handleSlotClickUnified(listType, index, isRightClick = false) {
+        const targetList = this.getSourceList(listType);
+        if (!targetList) return;
 
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot === null) {
-            if (targetList[index] && targetList[index].count > 0) {
-                this.draggedSlot = { type: listType, index, item: { ...targetList[index] } };
-                targetList[index] = null;
-                floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                floatItem.style.display = 'block';
+            const item = targetList[index];
+            if (item && item.count > 0) {
+                if (isRightClick) {
+                    this.draggedSlot = { type: listType, index, item: { id: item.id, count: 1 } };
+                    item.count--;
+                    if (item.count <= 0) {
+                        targetList[index] = null;
+                    }
+                } else {
+                    this.draggedSlot = { type: listType, index, item: { ...item } };
+                    targetList[index] = null;
+                }
+
+                if (floatItem) {
+                    floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+                    floatItem.style.display = 'block';
+                }
             }
         } else {
-            const temp = targetList[index];
-            targetList[index] = this.draggedSlot.item;
+            const targetItem = targetList[index];
+            const held = this.draggedSlot.item;
 
-            if (temp) {
-                let sourceList;
-                if (this.draggedSlot.type === 'chest') sourceList = this.chestData.get(this.activeChestKey);
-                else if (this.draggedSlot.type === 'hotbar') sourceList = this.hotbarSlots;
-                else sourceList = this.inventorySlots;
+            if (isRightClick) {
+                if (!targetItem) {
+                    targetList[index] = { id: held.id, count: 1 };
+                    held.count--;
+                } else if (targetItem.id === held.id && targetItem.count < 64) {
+                    targetItem.count++;
+                    held.count--;
+                }
 
-                sourceList[this.draggedSlot.index] = temp;
+                if (held.count <= 0) {
+                    this.draggedSlot = null;
+                    if (floatItem) floatItem.style.display = 'none';
+                }
+            } else {
+                if (!targetItem) {
+                    targetList[index] = held;
+                    this.draggedSlot = null;
+                    if (floatItem) floatItem.style.display = 'none';
+                } else if (targetItem.id === held.id) {
+                    const space = 64 - targetItem.count;
+                    const add = Math.min(space, held.count);
+                    targetItem.count += add;
+                    held.count -= add;
+
+                    if (held.count <= 0) {
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    }
+                } else {
+                    const sourceList = this.getSourceList(this.draggedSlot.type);
+                    if (sourceList) {
+                        const temp = targetList[index];
+                        targetList[index] = held;
+                        sourceList[this.draggedSlot.index] = temp;
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    } else {
+                        const temp = targetList[index];
+                        targetList[index] = held;
+                        this.draggedSlot = { type: listType, index, item: temp };
+                        if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                    }
+                }
             }
-
-            this.draggedSlot = null;
-            floatItem.style.display = 'none';
         }
+
+        if (listType === 'craft' || this.draggedSlot?.type === 'craft') this.checkCrafting();
+        if (listType === 'craft3x3' || this.draggedSlot?.type === 'craft3x3') this.checkCrafting3x3();
 
         if (this.activeChestKey && (listType === 'chest' || this.draggedSlot?.type === 'chest')) {
             this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
         }
 
-        this.updateChestUI();
+        this.updateUI();
+        if (this.activeChestKey) this.updateChestUI();
+        this.updateCraftingTableUI();
     }
 
     updateChestUI() {
@@ -2802,7 +2757,6 @@ spawnNightMobs(delta) {
         const maxStack = 64;
         let remaining = count;
 
-        // 1. Tenta preencher slots existentes na Hotbar
         for (let i = 0; i < this.hotbarSlots.length; i++) {
             let s = this.hotbarSlots[i];
             if (s && s.id === typeId && s.count < maxStack) {
@@ -2814,7 +2768,6 @@ spawnNightMobs(delta) {
             }
         }
 
-        // 2. Tenta preencher slots existentes no Inventário
         for (let i = 0; i < this.inventorySlots.length; i++) {
             let s = this.inventorySlots[i];
             if (s && s.id === typeId && s.count < maxStack) {
@@ -2826,7 +2779,6 @@ spawnNightMobs(delta) {
             }
         }
 
-        // 3. Se ainda sobrou, ocupa slots vazios na Hotbar
         let emptyH = this.hotbarSlots.findIndex(s => s === null);
         if (emptyH !== -1) {
             const add = Math.min(maxStack, remaining);
@@ -2835,7 +2787,6 @@ spawnNightMobs(delta) {
             if (remaining <= 0) { this.updateUI(); return; }
         }
 
-        // 4. Se ainda sobrou, ocupa slots vazios no Inventário
         let emptyI = this.inventorySlots.findIndex(s => s === null);
         if (emptyI !== -1) {
             const add = Math.min(maxStack, remaining);
@@ -2844,7 +2795,6 @@ spawnNightMobs(delta) {
             if (remaining <= 0) { this.updateUI(); return; }
         }
 
-        // 5. Se o inventário estiver 100% cheio, atira o restante para o chão
         if (remaining > 0) {
             this.spawnDroppedItem(this.position.x, this.position.y, this.position.z, typeId, remaining);
         }
@@ -2878,14 +2828,10 @@ spawnNightMobs(delta) {
                     if (this.scene) this.scene.updateMatrixWorld(true);
                     const dir = new THREE_REF.Vector3();
                     this.camera.getWorldDirection(dir);
-                    
                     const rawAngle = Math.atan2(dir.x, dir.z);
-                    
-                    // Adicionamos + Math.PI / 2 (90 graus) para que a face larga fique de frente para si!
                     doorRotation = Math.round(rawAngle / (Math.PI / 2)) * (Math.PI / 2) + (Math.PI / 2);
                 }
 
-                // Salva eternamente na memória
                 if (!window.DoorRotationMemory) window.DoorRotationMemory = new Map();
                 window.DoorRotationMemory.set(`${px},${py},${pz}`, doorRotation);
 
@@ -2911,35 +2857,11 @@ spawnNightMobs(delta) {
         }
     }
 
-    toggleInventory() {
-        const inv = document.getElementById('inventory-screen');
-        const chest = document.getElementById('chest-screen');
-        const craftTable = document.getElementById('crafting-table-screen');
-
-        if (inv.style.display === 'flex' || chest.style.display === 'flex' || craftTable.style.display === 'flex') {
-            inv.style.display = 'none';
-            chest.style.display = 'none';
-            craftTable.style.display = 'none';
-            this.activeChestKey = null;
-            this.controls.lock();
-        } else {
-            inv.style.display = 'flex';
-            this.controls.unlock();
-        }
-    }
-
-    checkSolid(x, y, z) {
-        const b = this.getBlock(x, y, z);
-        if (b === BLOCKS.DOOR) return false;
-        return b !== BLOCKS.AIR && b !== BLOCKS.WATER && !BLOCK_TILES[b]?.plant;
-    }
-
     dropDraggedItem() {
         if (this.draggedSlot && this.draggedSlot.item) {
             const dir = new THREE.Vector3();
             this.camera.getWorldDirection(dir);
             
-            // Lança o item a 1.5 blocos de distância do jogador
             this.spawnDroppedItem(
                 this.position.x + dir.x * 1.5,
                 this.position.y,
@@ -2977,7 +2899,7 @@ spawnNightMobs(delta) {
         const isOpen = inv.style.display === 'flex' || chest.style.display === 'flex' || craftTable.style.display === 'flex';
 
         if (isOpen) {
-            this.returnDraggedItemToInventory(); // Devolve qualquer item segurado para o inventário ao fechar
+            this.returnDraggedItemToInventory();
             inv.style.display = 'none';
             chest.style.display = 'none';
             craftTable.style.display = 'none';
@@ -2987,6 +2909,12 @@ spawnNightMobs(delta) {
             inv.style.display = 'flex';
             this.controls.unlock();
         }
+    }
+
+    checkSolid(x, y, z) {
+        const b = this.getBlock(x, y, z);
+        if (b === BLOCKS.DOOR) return false;
+        return b !== BLOCKS.AIR && b !== BLOCKS.WATER && !BLOCK_TILES[b]?.plant;
     }
 
     checkAABBCollision(pos) {
@@ -3165,32 +3093,27 @@ spawnNightMobs(delta) {
             }
         }
 
-        // ==========================================
-        // HELPER PARA COLISÃO COM PORTAS FECHADAS
-        // ==========================================
         const checkDoorCollision = (pos) => {
-            if (!this.doorMeshes) return false; // Se não houver portas, ignora
+            if (!this.doorMeshes) return false;
             
-            // Verifica o bloco nos pés e na cabeça do jogador
             const minX = Math.floor(pos.x - this.playerRadius);
             const maxX = Math.floor(pos.x + this.playerRadius);
             const minZ = Math.floor(pos.z - this.playerRadius);
             const maxZ = Math.floor(pos.z + this.playerRadius);
-            const minY = Math.floor(pos.y - 1.62); // Pés
-            const maxY = Math.floor(pos.y + 0.18); // Cabeça
+            const minY = Math.floor(pos.y - 1.62);
+            const maxY = Math.floor(pos.y + 0.18);
 
-            // Varre o volume que o jogador ocupa procurando portas
             for (let x = minX; x <= maxX; x++) {
                 for (let y = minY; y <= maxY; y++) {
                     for (let z = minZ; z <= maxZ; z++) {
-                        const key1 = `${x},${y},${z}`;     // Metade inferior da porta
-                        const key2 = `${x},${y-1},${z}`;   // Metade superior da porta (porta tem 2 de altura)
+                        const key1 = `${x},${y},${z}`;
+                        const key2 = `${x},${y-1},${z}`;
                         
                         if (this.doorMeshes.has(key1)) {
-                            if (!this.doorMeshes.get(key1).isOpen) return true; // Bateu numa porta fechada!
+                            if (!this.doorMeshes.get(key1).isOpen) return true;
                         }
                         if (this.doorMeshes.has(key2)) {
-                            if (!this.doorMeshes.get(key2).isOpen) return true; // Bateu na parte de cima da porta fechada!
+                            if (!this.doorMeshes.get(key2).isOpen) return true;
                         }
                     }
                 }
@@ -3285,9 +3208,6 @@ spawnNightMobs(delta) {
             this.playerHand.update(activeItem ? activeItem.id : null, delta);
             this.updateHungerAndHealth(delta, isWalking);
 
-            // ==========================================
-            // MOVIMENTO EIXO X (Inclui bloqueio da Porta)
-            // ==========================================
             if (Math.abs(this.velocity.x) > 0.0001) {
                 this.position.x += this.velocity.x * delta;
                 if (this.checkAABBCollision(this.position) || checkDoorCollision(this.position)) {
@@ -3309,9 +3229,6 @@ spawnNightMobs(delta) {
                 }
             }
 
-            // ==========================================
-            // MOVIMENTO EIXO Z (Inclui bloqueio da Porta)
-            // ==========================================
             if (Math.abs(this.velocity.z) > 0.0001) {
                 this.position.z += this.velocity.z * delta;
                 if (this.checkAABBCollision(this.position) || checkDoorCollision(this.position)) {
@@ -3394,77 +3311,75 @@ spawnNightMobs(delta) {
         }
 
         try {
-    this.updatePhysics(delta);
-    this.updateDayNight(delta);
-    this.updateClouds(delta);
-    this.updateChunks();
-    this.updateMining(delta);
-    this.particleSystem.update(delta);
-    this.weatherSystem.update(delta, this.position, this.currentWeather);
+            this.updatePhysics(delta);
+            this.updateDayNight(delta);
+            this.updateClouds(delta);
+            this.updateChunks();
+            this.updateMining(delta);
+            this.particleSystem.update(delta);
+            this.weatherSystem.update(delta, this.position, this.currentWeather);
 
-    // 🚪 ANIMAÇÃO SUAVE DE ABERTURA/FECHO DAS PORTAS
-
-    if (this.doorMeshes) {
-        for (let d of this.doorMeshes.values()) {
-            const target = d.targetRot || 0;
-            if (d.doorGroup) {
-                d.doorGroup.rotation.y += (target - d.doorGroup.rotation.y) * 0.2;
+            if (this.doorMeshes) {
+                for (let d of this.doorMeshes.values()) {
+                    const target = d.targetRot || 0;
+                    if (d.doorGroup) {
+                        d.doorGroup.rotation.y += (target - d.doorGroup.rotation.y) * 0.2;
+                    }
+                }
             }
-        }
-    }
 
-    this.spawnNightMobs(delta);
+            this.spawnNightMobs(delta);
 
-    this.mobs.forEach(mob => {
-        if (isClientLAN) {
-            if (mob.targetPos) {
-                const pos = mob.mesh ? mob.mesh.position : mob.position;
-                if (pos) pos.lerp(mob.targetPos, 0.3);
-                if (mob.mesh) mob.mesh.rotation.y = lerpAngle(mob.mesh.rotation.y, mob.rotY !== undefined ? mob.rotY : mob.rotation, 0.3);
-                if (mob.velocity) mob.velocity.set(0, 0, 0);
+            this.mobs.forEach(mob => {
+                if (isClientLAN) {
+                    if (mob.targetPos) {
+                        const pos = mob.mesh ? mob.mesh.position : mob.position;
+                        if (pos) pos.lerp(mob.targetPos, 0.3);
+                        if (mob.mesh) mob.mesh.rotation.y = lerpAngle(mob.mesh.rotation.y, mob.rotY !== undefined ? mob.rotY : mob.rotation, 0.3);
+                        if (mob.velocity) mob.velocity.set(0, 0, 0);
+                    }
+                    mob.update(delta);
+                } else {
+                    mob.update(delta);
+                    mob.targetPos = mob.targetPos || new THREE.Vector3();
+                    const pos = mob.mesh ? mob.mesh.position : mob.position;
+                    if (pos) mob.targetPos.copy(pos);
+                }
+            });
+
+            this.fishes.forEach(fish => fish.update(delta, this));
+
+            if (this.droppedItems) {
+                for (let i = this.droppedItems.length - 1; i >= 0; i--) {
+                    if (this.droppedItems[i].update(delta)) {
+                        this.droppedItems.splice(i, 1);
+                    }
+                }
             }
-            mob.update(delta);
-        } else {
-            mob.update(delta);
-            mob.targetPos = mob.targetPos || new THREE.Vector3();
-            const pos = mob.mesh ? mob.mesh.position : mob.position;
-            if (pos) mob.targetPos.copy(pos);
-        }
-    });
 
-    this.fishes.forEach(fish => fish.update(delta, this));
+            for (let [id, rp] of this.remotePlayers.entries()) {
+                const isMoving = rp.group.position.distanceTo(rp.targetPos) > 0.05;
 
-    if (this.droppedItems) {
-        for (let i = this.droppedItems.length - 1; i >= 0; i--) {
-            if (this.droppedItems[i].update(delta)) {
-                this.droppedItems.splice(i, 1);
+                rp.group.position.lerp(rp.targetPos, 0.2);
+                rp.group.rotation.y = lerpAngle(rp.group.rotation.y, rp.rotY, 0.2);
+
+                const limbs = rp.group.userData.limbs;
+                if (limbs) {
+                    if (isMoving) {
+                        rp.group.userData.walkAnimTimer += delta * 10.0;
+                        const swing = Math.sin(rp.group.userData.walkAnimTimer) * 0.7;
+                        limbs.armL.rotation.x = -swing;
+                        limbs.armR.rotation.x = swing;
+                        limbs.legL.rotation.x = swing;
+                        limbs.legR.rotation.x = -swing;
+                    } else {
+                        limbs.armL.rotation.x = THREE.MathUtils.lerp(limbs.armL.rotation.x, 0, 0.2);
+                        limbs.armR.rotation.x = THREE.MathUtils.lerp(limbs.armR.rotation.x, 0, 0.2);
+                        limbs.legL.rotation.x = THREE.MathUtils.lerp(limbs.legL.rotation.x, 0, 0.2);
+                        limbs.legR.rotation.x = THREE.MathUtils.lerp(limbs.legR.rotation.x, 0, 0.2);
+                    }
+                }
             }
-        }
-    }
-
-    for (let [id, rp] of this.remotePlayers.entries()) {
-        const isMoving = rp.group.position.distanceTo(rp.targetPos) > 0.05;
-
-        rp.group.position.lerp(rp.targetPos, 0.2);
-        rp.group.rotation.y = lerpAngle(rp.group.rotation.y, rp.rotY, 0.2);
-
-        const limbs = rp.group.userData.limbs;
-        if (limbs) {
-            if (isMoving) {
-                rp.group.userData.walkAnimTimer += delta * 10.0;
-                const swing = Math.sin(rp.group.userData.walkAnimTimer) * 0.7;
-                limbs.armL.rotation.x = -swing;
-                limbs.armR.rotation.x = swing;
-                limbs.legL.rotation.x = swing;
-                limbs.legR.rotation.x = -swing;
-            } else {
-                limbs.armL.rotation.x = THREE.MathUtils.lerp(limbs.armL.rotation.x, 0, 0.2);
-                limbs.armR.rotation.x = THREE.MathUtils.lerp(limbs.armR.rotation.x, 0, 0.2);
-                limbs.legL.rotation.x = THREE.MathUtils.lerp(limbs.legL.rotation.x, 0, 0.2);
-                limbs.legR.rotation.x = THREE.MathUtils.lerp(limbs.legR.rotation.x, 0, 0.2);
-            }
-        }
-    }
 
             for (let [key, door] of this.doorMeshes.entries()) {
                 door.group.rotation.y = THREE.MathUtils.lerp(door.group.rotation.y, door.targetRot, 0.2);
@@ -3508,4 +3423,3 @@ spawnNightMobs(delta) {
         setTimeout(updateSize, 300);
     }
 }
-
