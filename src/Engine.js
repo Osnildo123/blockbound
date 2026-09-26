@@ -120,224 +120,6 @@ export class MinecraftEngine {
         }
     }
 
-    initMobileControls() {
-        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 768;
-        if (!isMobile) return;
-
-        this.isMobile = true;
-        // Fixa a ordem de rotação da câmara para FPS (evita torções no ecrã tátil)
-        this.camera.rotation.order = 'YXZ';
-
-        // Elimina controlos antigos se já existirem
-        const oldUI = document.getElementById('mobile-controls');
-        if (oldUI) oldUI.remove();
-
-        // Camada de controlos móveis
-        const mobileUI = document.createElement('div');
-        mobileUI.id = 'mobile-controls';
-        mobileUI.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            pointer-events: none; z-index: 1100; display: flex; justify-content: space-between;
-            user-select: none; -webkit-user-select: none; touch-action: none;
-        `;
-
-        mobileUI.innerHTML = `
-            <!-- Botão de Pause / Configurações (Canto Superior Direito) -->
-            <button id="btn-m-pause" style="position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6); border: 2px solid #fff; color: white; width: 46px; height: 46px; border-radius: 10px; font-size: 22px; pointer-events: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;">⚙️</button>
-
-            <!-- D-Pad de Movimento (Lado Esquerdo) -->
-            <div style="position: absolute; bottom: 25px; left: 20px; width: 130px; height: 130px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; pointer-events: auto;">
-                <div></div>
-                <button id="btn-m-up" style="background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.7); color: white; border-radius: 8px; font-size: 18px;">▲</button>
-                <div></div>
-                <button id="btn-m-left" style="background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.7); color: white; border-radius: 8px; font-size: 18px;">◄</button>
-                <div></div>
-                <button id="btn-m-right" style="background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.7); color: white; border-radius: 8px; font-size: 18px;">►</button>
-                <div></div>
-                <button id="btn-m-down" style="background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.7); color: white; border-radius: 8px; font-size: 18px;">▼</button>
-                <div></div>
-            </div>
-
-            <!-- Botões de Ação (Lado Direito) -->
-            <div style="position: absolute; bottom: 25px; right: 20px; display: flex; flex-direction: column; gap: 12px; align-items: flex-end; pointer-events: auto;">
-                <div style="display: flex; gap: 10px;">
-                    <button id="btn-m-mine" style="background: rgba(220,38,38,0.75); border: 2px solid #fff; color: white; width: 55px; height: 55px; border-radius: 50%; font-size: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⛏️</button>
-                    <button id="btn-m-place" style="background: rgba(37,99,235,0.75); border: 2px solid #fff; color: white; width: 55px; height: 55px; border-radius: 50%; font-size: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">📦</button>
-                </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <button id="btn-m-inv" style="background: rgba(234,179,8,0.75); border: 2px solid #fff; color: white; width: 48px; height: 48px; border-radius: 50%; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">🎒</button>
-                    <button id="btn-m-jump" style="background: rgba(34,197,94,0.75); border: 2px solid #fff; color: white; width: 62px; height: 62px; border-radius: 50%; font-weight: bold; font-size: 22px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⬆️</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(mobileUI);
-
-        // Evento do Botão de Pause / Configurações
-        document.getElementById('btn-m-pause').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.isPaused = true;
-            document.getElementById('pause-menu').style.display = 'flex';
-            document.getElementById('pause-main-box').style.display = 'flex';
-            document.getElementById('pause-settings-box').style.display = 'none';
-        });
-
-        // Mapeamento do D-Pad (W, A, S, D, Espaço)
-        const bindBtn = (id, code) => {
-            const btn = document.getElementById(id);
-            if (!btn) return;
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); this.keys[code] = true; });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); this.keys[code] = false; });
-        };
-
-        bindBtn('btn-m-up', 'KeyW');
-        bindBtn('btn-m-down', 'KeyS');
-        bindBtn('btn-m-left', 'KeyA');
-        bindBtn('btn-m-right', 'KeyD');
-        bindBtn('btn-m-jump', 'Space');
-
-        // Inventário
-        document.getElementById('btn-m-inv').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.toggleInventory();
-        });
-
-        // Minerar
-        document.getElementById('btn-m-mine').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.mouseDownPrimary = true;
-            this.handlePrimaryAction(true);
-        });
-        document.getElementById('btn-m-mine').addEventListener('touchend', (e) => {
-            e.preventDefault();
-            this.mouseDownPrimary = false;
-            this.miningTimer = 0;
-            this.currentMiningKey = null;
-        });
-
-        // Colocar
-        document.getElementById('btn-m-place').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.handleSecondaryAction();
-        });
-
-        // Controlo Intuitivo da Câmara por Arraste (Sem Inversão)
-        let touchStartX = 0, touchStartY = 0;
-        let touchCamId = null;
-
-        window.addEventListener('touchstart', (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const t = e.changedTouches[i];
-                if (t.clientX > window.innerWidth / 3 && touchCamId === null) {
-                    touchCamId = t.identifier;
-                    touchStartX = t.clientX;
-                    touchStartY = t.clientY;
-                }
-            }
-        });
-
-        window.addEventListener('touchmove', (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const t = e.changedTouches[i];
-                if (t.identifier === touchCamId) {
-                    const dx = t.clientX - touchStartX;
-                    const dy = t.clientY - touchStartY;
-
-                    // Arrastar para a direita roda para a direita; arrastar para cima olha para cima
-                    this.camera.rotation.y -= dx * 0.005;
-                    this.camera.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, this.camera.rotation.x - dy * 0.005));
-                    this.camera.rotation.z = 0;
-
-                    touchStartX = t.clientX;
-                    touchStartY = t.clientY;
-                }
-            }
-        });
-
-        const clearTouchCam = (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === touchCamId) {
-                    touchCamId = null;
-                }
-            }
-        };
-
-        window.addEventListener('touchend', clearTouchCam);
-        window.addEventListener('touchcancel', clearTouchCam);
-
-        // Aviso de Tela Vertical (Portrait)
-        const portraitWarning = document.createElement('div');
-        portraitWarning.id = 'portrait-warning';
-        portraitWarning.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(13, 15, 24, 0.95); color: #fff; z-index: 9999; display: none;
-            flex-direction: column; justify-content: center; align-items: center;
-            font-family: 'Press Start 2P', monospace; text-align: center; padding: 20px;
-            pointer-events: auto;
-        `;
-        portraitWarning.innerHTML = `
-            <div style="font-size: 50px; margin-bottom: 20px;">📱🔄</div>
-            <h2 style="font-size: 16px; color: #facc15; margin-bottom: 12px; line-height: 1.4;">RODE O TELEMÓVEL</h2>
-            <p style="font-size: 10px; color: #ccc; line-height: 1.6; max-width: 280px;">Por favor, rode o dispositivo para a horizontal para jogar Blockbound.</p>
-        `;
-        document.body.appendChild(portraitWarning);
-
-        const checkOrientation = () => {
-            const isPortrait = window.innerHeight > window.innerWidth;
-            if (isPortrait && this.isMobile) {
-                portraitWarning.style.display = 'flex';
-                this.enterFullscreen();
-            } else {
-                portraitWarning.style.display = 'none';
-            }
-        };
-
-        window.addEventListener('touchstart', () => { this.enterFullscreen(); }, { once: true });
-        window.addEventListener('resize', checkOrientation);
-        window.addEventListener('orientationchange', () => { setTimeout(checkOrientation, 250); });
-
-        checkOrientation();
-
-        // Garante que o toque nos slots da Hotbar altera o this.selectedSlot
-        for (let i = 0; i < 9; i++) {
-            const slot = document.getElementById(`hotbar-slot-${i}`) || document.getElementById(`slot-${i}`);
-            if (slot) {
-                slot.style.pointerEvents = 'auto'; // Garante que aceita toques sobrepostos
-                slot.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.selectedSlot = i; // Atualiza o slot ativo no motor
-                    if (typeof this.updateHotbarUI === 'function') this.updateHotbarUI();
-                    if (typeof this.updateUI === 'function') this.updateUI();
-                }, { passive: false });
-            }
-        }
-
-        // Garante suporte ao toque em todos os slots da Hotbar
-        setTimeout(() => {
-            for (let i = 0; i < 9; i++) {
-                // Tenta encontrar o elemento pelo ID de slot
-                const slot = document.getElementById(`hotbar-slot-${i}`) || 
-                             document.getElementById(`slot-${i}`) || 
-                             document.querySelectorAll('.hotbar-slot, .slot')[i];
-                
-                if (slot) {
-                    slot.style.pointerEvents = 'auto'; // Força os cliques de toque a passarem
-                    
-                    const selectSlot = (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.selectedSlot = i; // Altera o slot ativo no motor
-                        if (typeof this.updateUI === 'function') this.updateUI();
-                        if (typeof this.updateHotbarUI === 'function') this.updateHotbarUI();
-                    };
-
-                    slot.addEventListener('touchstart', selectSlot, { passive: false });
-                    slot.addEventListener('click', selectSlot);
-                }
-            }
-        }, 500);
-    }
-
     enterFullscreen() {
         const elem = document.documentElement;
         if (!document.fullscreenElement && !document.webkitFullscreenElement) {
@@ -346,13 +128,6 @@ export class MinecraftEngine {
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
             }
-        }
-
-        // Tenta bloquear a tela em modo paisagem (Landscape)
-        if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch(() => {
-                // Ignora se o navegador exigir um gesto prévio do utilizador
-            });
         }
     }
 
@@ -539,7 +314,6 @@ export class MinecraftEngine {
         this.weatherSystem = new WeatherSystem(this.scene);
         this.initPhysics();
         this.initInputs();
-        this.initMobileControls(); // <-- ADICIONAR ESTA LINHA
         this.initUI();
 
         this.playerHand = new FirstPersonHand(this.camera);
@@ -1807,24 +1581,6 @@ export class MinecraftEngine {
         this.updateUI();
     }
 
-    // Cole/Ajuste no teu método de inicialização da UI:
-    setupHotbarEvents() {
-        for (let i = 0; i < 9; i++) {
-            const slotEl = document.getElementById(`hotbar-slot-${i}`) || document.getElementById(`hotbar-${i}`);
-            if (slotEl) {
-                const select = (e) => {
-                    e.stopPropagation();
-                    this.selectedSlot = i; // Atualiza o slot ativo no motor!
-                    this.updateHotbarUI(); // Atualiza a borda/destaque visual
-                };
-
-                // Aceita tanto toque de telemóvel quanto clique de rato
-                slotEl.addEventListener('touchstart', select, { passive: false });
-                slotEl.addEventListener('mousedown', select);
-            }
-        }
-    }
-
     openCraftingTableGUI() {
         const grid = document.getElementById('craft3x3-grid');
         grid.innerHTML = '';
@@ -2892,85 +2648,80 @@ export class MinecraftEngine {
     }
 
     handleSecondaryAction() {
-    // Permite a ação se estivermos no Mobile OU com o rato trancado no PC
-    if (!this.isLocked && !this.isMobile) return;
+        const item = this.hotbarSlots[this.selectedSlot];
+        const target = this.getTargetBlock();
 
-    const item = this.hotbarSlots[this.selectedSlot];
-    const target = this.getTargetBlock();
-
-    // 1. Comida
-    if (item && BLOCK_TILES[item.id]?.food) {
-        const info = BLOCK_TILES[item.id];
-        this.hunger = Math.min(100, this.hunger + info.healHunger);
-        if (info.healHP) this.hp = Math.min(100, this.hp + info.healHP);
-        item.count--;
-        if (item.count <= 0) this.hotbarSlots[this.selectedSlot] = null; // Limpa slot se acabar
-        if (this.sound) this.sound.playEat();
-        this.updateUI();
-        this.notify(`Comeu ${info.name}! Fome: ${Math.round(this.hunger)}%`);
-        return;
-    }
-
-    // 2. Interação com Portas
-    if (target && target.isDoor) {
-        if (this.doorMeshes.has(target.doorKey)) {
-            const d = this.doorMeshes.get(target.doorKey);
-            const newState = !d.isOpen;
-            d.isOpen = newState;
-            d.targetRot = newState ? Math.PI / 2 : 0;
-            
-            this.network.sendToggleDoor(target.doorKey, newState);
-            if (this.sound) this.sound.playPlace();
-            this.notify(newState ? "🚪 Porta aberta" : "🚪 Porta fechada");
-        }
-        return;
-    }
-
-    // 3. Interação com Blocos Funcionais
-    if (target && target.breakPos) {
-        const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
-        const targetType = this.getBlock(bx, by, bz);
-        const doorKey = `${bx},${by},${bz}`;
-
-        if (item && item.id === BLOCKS.FLINT_STEEL) {
-            const px = target.placePos.x, py = target.placePos.y, pz = target.placePos.z;
-            this.setBlockModified(px, py, pz, BLOCKS.CAMPFIRE);
-            if (this.sound) this.sound.playPlace();
-            this.notify("🔥 Acendeu uma Fogueira com o Isqueiro!");
-            this.rebuildChunkAtBlock(px, py, pz);
-            return;
-        }
-
-        if (targetType === BLOCKS.CHEST) {
-            this.openChestGUI(doorKey);
-            return;
-        }
-
-        if (targetType === BLOCKS.CRAFTING_TABLE) {
-            this.openCraftingTableGUI();
-            return;
-        }
-
-        if (targetType === BLOCKS.FURNACE) {
-            this.openFurnaceGUI(doorKey);
-            return;
-        }
-
-        if (targetType === BLOCKS.CAMPFIRE && item && item.id === BLOCKS.RAW_MEAT) {
+        // 1. Comida
+        if (item && BLOCK_TILES[item.id]?.food) {
+            const info = BLOCK_TILES[item.id];
+            this.hunger = Math.min(100, this.hunger + info.healHunger);
+            if (info.healHP) this.hp = Math.min(100, this.hp + info.healHP);
             item.count--;
-            if (item.count <= 0) this.hotbarSlots[this.selectedSlot] = null;
-            this.addToInventory(BLOCKS.COOKED_MEAT, 1);
-            if (this.sound) this.sound.playPlace();
+            if (this.sound) this.sound.playEat();
             this.updateUI();
-            this.notify("Assou a Carne na Fogueira! +1 Carne Assada");
+            this.notify(`Comeu ${info.name}! Fome: ${Math.round(this.hunger)}%`);
             return;
         }
-    }
 
-    // 4. Colocar o Bloco no Mundo
-    if (this.playerHand) this.playerHand.swing();
-    this.placeBlock();
-}
+        // 2. Interação com Portas
+        if (target && target.isDoor) {
+            if (this.doorMeshes.has(target.doorKey)) {
+                const d = this.doorMeshes.get(target.doorKey);
+                const newState = !d.isOpen;
+                d.isOpen = newState;
+                d.targetRot = newState ? Math.PI / 2 : 0;
+                
+                this.network.sendToggleDoor(target.doorKey, newState);
+                if (this.sound) this.sound.playPlace();
+                this.notify(newState ? "🚪 Porta aberta" : "🚪 Porta fechada");
+            }
+            return;
+        }
+
+        // 3. Interação com Blocos Funcionais
+        if (target && target.breakPos) {
+            const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
+            const targetType = this.getBlock(bx, by, bz);
+            const doorKey = `${bx},${by},${bz}`;
+
+            if (item && item.id === BLOCKS.FLINT_STEEL) {
+                const px = target.placePos.x, py = target.placePos.y, pz = target.placePos.z;
+                this.setBlockModified(px, py, pz, BLOCKS.CAMPFIRE);
+                if (this.sound) this.sound.playPlace();
+                this.notify("🔥 Acendeu uma Fogueira com o Isqueiro!");
+                this.rebuildChunkAtBlock(px, py, pz);
+                return;
+            }
+
+            if (targetType === BLOCKS.CHEST) {
+                this.openChestGUI(doorKey);
+                return;
+            }
+
+            if (targetType === BLOCKS.CRAFTING_TABLE) {
+                this.openCraftingTableGUI();
+                return;
+            }
+
+            // Fornalha (Usa apenas a constante BLOCKS.FURNACE)
+            if (targetType === BLOCKS.FURNACE) {
+                this.openFurnaceGUI(doorKey);
+                return;
+            }
+
+            if (targetType === BLOCKS.CAMPFIRE && item && item.id === BLOCKS.RAW_MEAT) {
+                item.count--;
+                this.addToInventory(BLOCKS.COOKED_MEAT, 1);
+                if (this.sound) this.sound.playPlace();
+                this.updateUI();
+                this.notify("Assou a Carne na Fogueira! +1 Carne Assada");
+                return;
+            }
+        }
+
+        // 4. Colocar o Bloco no Mundo
+        this.placeBlock();
+    }
 
     openChestGUI(chestKey) {
         this.activeChestKey = chestKey;
@@ -3107,7 +2858,6 @@ export class MinecraftEngine {
     placeBlock() {
         const target = this.getTargetBlock();
         const item = this.hotbarSlots[this.selectedSlot];
-
         if (target && target.placePos && item && item.count > 0) {
             if (BLOCK_TILES[item.id]?.isTool) return;
 
@@ -3142,11 +2892,6 @@ export class MinecraftEngine {
             }
 
             item.count--;
-            // Limpa o slot da mão quando os blocos acabam
-            if (item.count <= 0) {
-                this.hotbarSlots[this.selectedSlot] = null;
-            }
-
             if (this.sound) this.sound.playPlace();
             this.updateUI();
 
