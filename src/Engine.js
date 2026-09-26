@@ -1,18 +1,21 @@
 // Receitas da Fornalha (Ingrediente -> Resultado)
 const SMELTING_RECIPES = {
-    [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT || BLOCKS.IRON, cookTime: 8.0 },
+    [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
     [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_ORE, cookTime: 8.0 },
     [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
     [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
+    [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
     [BLOCKS.RAW_MEAT]: { result: BLOCKS.COOKED_MEAT, cookTime: 5.0 },
     [BLOCKS.WOOD]: { result: BLOCKS.PLANK, count: 4, cookTime: 3.0 }
 };
 
 // Tempo de queima dos combustíveis (em segundos)
 const FUEL_BURN_TIMES = {
-    [BLOCKS.COAL_ORE]: 80.0, // Queima durante 80 segundos (dá para 10 itens)
-    [BLOCKS.WOOD]: 15.0,     // Queima durante 15 segundos
-    [BLOCKS.PLANK]: 10.0     // Queima durante 10 segundos
+    [BLOCKS.COAL_ORE]: 80.0,
+    [BLOCKS.WOOD]: 15.0,
+    [BLOCKS.PLANK]: 10.0,
+    [BLOCKS.CRAFTING_TABLE]: 15.0,
+    [BLOCKS.CHEST]: 15.0
 };
 
 const THREE = window.THREE;

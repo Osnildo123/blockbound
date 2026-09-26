@@ -1,3 +1,20 @@
+// Receitas da Fornalha (Ingrediente -> Resultado)
+const SMELTING_RECIPES = {
+    [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT || BLOCKS.IRON, cookTime: 8.0 },
+    [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_ORE, cookTime: 8.0 },
+    [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
+    [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
+    [BLOCKS.RAW_MEAT]: { result: BLOCKS.COOKED_MEAT, cookTime: 5.0 },
+    [BLOCKS.WOOD]: { result: BLOCKS.PLANK, count: 4, cookTime: 3.0 }
+};
+
+// Tempo de queima dos combustíveis (em segundos)
+const FUEL_BURN_TIMES = {
+    [BLOCKS.COAL_ORE]: 80.0, // Queima durante 80 segundos (dá para 10 itens)
+    [BLOCKS.WOOD]: 15.0,     // Queima durante 15 segundos
+    [BLOCKS.PLANK]: 10.0     // Queima durante 10 segundos
+};
+
 const THREE = window.THREE;
 
 function lerpAngle(a, b, t) {
@@ -22,6 +39,61 @@ import { AppState, renderStartScreen } from './main.js';
 import { DroppedItem } from './entities/DroppedItem.js';
 
 export class MinecraftEngine {
+    updateFurnaces(delta) {
+        if (!this.furnaceData) return;
+
+        for (let [key, furnace] of this.furnaceData.entries()) {
+            const input = furnace.slots[0];
+            const fuel = furnace.slots[1];
+            const output = furnace.slots[2];
+
+            const recipe = input ? SMELTING_RECIPES[input.id] : null;
+
+            // 1. Se a fornalha está a queimar combustível, reduz o temporizador
+            if (furnace.burnTime > 0) {
+                furnace.burnTime -= delta;
+            }
+
+            // 2. Se o combustível acabou, tenta consumir novo combustível da pilha
+            if (furnace.burnTime <= 0 && recipe) {
+                if (fuel && FUEL_BURN_TIMES[fuel.id] && (!output || (output.id === recipe.result && output.count < 64))) {
+                    furnace.burnTime = FUEL_BURN_TIMES[fuel.id];
+                    furnace.maxBurnTime = furnace.burnTime;
+                    fuel.count--;
+                    if (fuel.count <= 0) furnace.slots[1] = null;
+                }
+            }
+
+            // 3. Se há fogo E há uma receita válida, avança o cozimento
+            if (furnace.burnTime > 0 && recipe) {
+                furnace.cookProgress += delta;
+
+                // Item pronto!
+                if (furnace.cookProgress >= recipe.cookTime) {
+                    furnace.cookProgress = 0;
+
+                    // Consome 1 ingrediente
+                    input.count--;
+                    if (input.count <= 0) furnace.slots[0] = null;
+
+                    // Adiciona ao resultado
+                    if (!furnace.slots[2]) {
+                        furnace.slots[2] = { id: recipe.result, count: recipe.count || 1 };
+                    } else {
+                        furnace.slots[2].count += (recipe.count || 1);
+                    }
+                }
+            } else {
+                // Se o fogo apagar ou tirar o item, o progresso arrefecem suavemente
+                furnace.cookProgress = Math.max(0, furnace.cookProgress - delta * 2);
+            }
+
+            // Se o jogador estiver com a janela desta fornalha aberta, atualiza a UI
+            if (this.activeFurnaceKey === key) {
+                this.updateFurnaceUI();
+            }
+        }
+    }
     enterFullscreen() {
         const elem = document.documentElement;
         if (!document.fullscreenElement && !document.webkitFullscreenElement) {
@@ -184,6 +256,9 @@ export class MinecraftEngine {
 
         this.hp = this.activeWorld ? (this.activeWorld.hp || 100) : 100;
         this.hunger = this.activeWorld ? (this.activeWorld.hunger || 100) : 100;
+
+        this.furnaceData = new Map(); // Guarda o estado (combustível, item, tempo) de cada fornalha no mundo
+        this.activeFurnaceKey = null;
 
         if (this.activeWorld && this.activeWorld.hotbar) {
             this.hotbarSlots = this.activeWorld.hotbar;
@@ -795,12 +870,16 @@ export class MinecraftEngine {
 
         this.controls.addEventListener('unlock', () => {
             if (!this.isRunning) return;
+            const furnaceEl = document.getElementById('furnace-screen');
+            
             const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                              document.getElementById('chest-screen').style.display === 'flex' || 
                              document.getElementById('crafting-table-screen').style.display === 'flex' || 
+                             (furnaceEl && furnaceEl.style.display === 'flex') || // <--- ADICIONADO AQUI
                              document.getElementById('start-screen').style.display !== 'none' ||
                              document.getElementById('pause-menu').style.display === 'flex' ||
                              (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
+            
             if (!isGuiOpen) {
                 const isLAN = this.network && (this.network.isHost || (this.network.netConn && this.network.netConn.open));
                 if (!isLAN) {
@@ -1345,9 +1424,12 @@ export class MinecraftEngine {
         });
 
         document.addEventListener('mousedown', (e) => {
+            const furnaceEl = document.getElementById('furnace-screen'); // <-- NOVA VARIÁVEL
+            
             const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                              document.getElementById('chest-screen').style.display === 'flex' || 
                              document.getElementById('crafting-table-screen').style.display === 'flex' || 
+                             (furnaceEl && furnaceEl.style.display === 'flex') || // <-- FORNALHA ADICIONADA AQUI
                              document.getElementById('start-screen').style.display !== 'none' ||
                              document.getElementById('pause-menu').style.display === 'flex' ||
                              (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
@@ -1383,7 +1465,8 @@ export class MinecraftEngine {
             }
         });
 
-        ['inventory-screen', 'chest-screen', 'crafting-table-screen'].forEach(id => {
+        // <-- FORNALHA ADICIONADA NA LISTA ABAIXO PARA PODER ATIRAR ITENS FORA DA JANELA
+        ['inventory-screen', 'chest-screen', 'crafting-table-screen', 'furnace-screen'].forEach(id => {
             const screenEl = document.getElementById(id);
             if (screenEl) {
                 screenEl.addEventListener('click', (e) => {
@@ -1518,33 +1601,46 @@ export class MinecraftEngine {
             return;
         }
 
+        // DECLARAÇÃO DO IDS NO TOPO (Evita o ReferenceError)
         const ids = items.map(i => i.id);
 
+        // RECEITA 1: 1 Tronco de Madeira -> 4 Tábuas
         if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
             this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
             return;
         }
 
+        // RECEITA 2: 2 Tábuas -> 4 Tochas
         if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
             this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
             return;
         }
 
+        // RECEITA 3: 4 Tábuas -> Bancada de Trabalho
         if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
             this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
             return;
         }
 
+        // RECEITA 4: 4 Pedregulhos -> 4 Pedras Polidas
         if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
             this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
             return;
         }
 
+        // RECEITA 5: 8 Tábuas ao redor -> Baú
         if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
             this.craft3x3Result = { id: BLOCKS.CHEST, count: 1 };
             return;
         }
 
+        // RECEITA DA FORNALHA: 8 Pedregulhos ao redor -> 1 Fornalha
+        if (items.length === 8 && ids.every(id => id === BLOCKS.COBBLE) && !this.crafting3x3Slots[4]) {
+            this.craft3x3Result = { id: BLOCKS.FURNACE, count: 1 };
+            return;
+        }
+
+        // RECEITA 6: Picareta de Diamante
         if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
@@ -1554,6 +1650,7 @@ export class MinecraftEngine {
             return;
         }
 
+        // RECEITA 7: Espada de Diamante
         if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
@@ -1716,6 +1813,7 @@ export class MinecraftEngine {
 
     getSourceList(type) {
         if (type === 'chest') return this.chestData.get(this.activeChestKey);
+        if (type === 'furnace') return this.furnaceData.get(this.activeFurnaceKey)?.slots; // <-- OBRIGATÓRIO AQUI
         if (type === 'hotbar') return this.hotbarSlots;
         if (type === 'inv') return this.inventorySlots;
         if (type === 'craft') return this.craftingSlots;
@@ -1728,6 +1826,9 @@ export class MinecraftEngine {
     }
 
     handleSlotClickUnified(listType, index, isRightClick = false) {
+        // Bloqueia a colocação de itens no slot de resultado da Fornalha (Slot 2)
+        if (listType === 'furnace' && index === 2 && this.draggedSlot !== null) return;
+
         const targetList = this.getSourceList(listType);
         if (!targetList) return;
 
@@ -1739,15 +1840,14 @@ export class MinecraftEngine {
                 if (isRightClick) {
                     this.draggedSlot = { type: listType, index, item: { id: item.id, count: 1 } };
                     item.count--;
-                    if (item.count <= 0) {
-                        targetList[index] = null;
-                    }
+                    if (item.count <= 0) targetList[index] = null;
                 } else {
                     this.draggedSlot = { type: listType, index, item: { ...item } };
                     targetList[index] = null;
                 }
 
                 if (floatItem) {
+                    floatItem.style.zIndex = "9999"; // Força a ficar na frente
                     floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
                     floatItem.style.display = 'block';
                 }
@@ -1764,7 +1864,6 @@ export class MinecraftEngine {
                     targetItem.count++;
                     held.count--;
                 }
-
                 if (held.count <= 0) {
                     this.draggedSlot = null;
                     if (floatItem) floatItem.style.display = 'none';
@@ -1796,7 +1895,10 @@ export class MinecraftEngine {
                         const temp = targetList[index];
                         targetList[index] = held;
                         this.draggedSlot = { type: listType, index, item: temp };
-                        if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                        if (floatItem) {
+                            floatItem.style.zIndex = "9999";
+                            floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                        }
                     }
                 }
             }
@@ -1811,6 +1913,7 @@ export class MinecraftEngine {
 
         this.updateUI();
         if (this.activeChestKey) this.updateChestUI();
+        if (this.activeFurnaceKey) this.updateFurnaceUI();
         this.updateCraftingTableUI();
     }
 
@@ -2409,8 +2512,15 @@ export class MinecraftEngine {
             this.setBlockModified(bx, by, bz, newType);
 
             this.sound.playBreak();
-            this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, type, 1);
-            this.notify(`Coletou: ${BLOCK_TILES[type].name}`);
+
+            // Se minerar Pedra (STONE), o item gerado no chão passa a ser Pedregulho (COBBLE)
+            let dropType = type;
+            if (type === BLOCKS.STONE) {
+                dropType = BLOCKS.COBBLE;
+            }
+
+            this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, dropType, 1);
+            this.notify(`Coletou: ${BLOCK_TILES[dropType]?.name || 'Item'}`);
 
             this.rebuildChunkAtBlock(bx, by, bz);
             this.miningCooldown = 0.20;
@@ -2512,6 +2622,7 @@ export class MinecraftEngine {
         const item = this.hotbarSlots[this.selectedSlot];
         const target = this.getTargetBlock();
 
+        // 1. Comida
         if (item && BLOCK_TILES[item.id]?.food) {
             const info = BLOCK_TILES[item.id];
             this.hunger = Math.min(100, this.hunger + info.healHunger);
@@ -2523,6 +2634,7 @@ export class MinecraftEngine {
             return;
         }
 
+        // 2. Interação com Portas
         if (target && target.isDoor) {
             if (this.doorMeshes.has(target.doorKey)) {
                 const d = this.doorMeshes.get(target.doorKey);
@@ -2537,6 +2649,7 @@ export class MinecraftEngine {
             return;
         }
 
+        // 3. Interação com Blocos Funcionais
         if (target && target.breakPos) {
             const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
             const targetType = this.getBlock(bx, by, bz);
@@ -2561,6 +2674,12 @@ export class MinecraftEngine {
                 return;
             }
 
+            // Fornalha (Usa apenas a constante BLOCKS.FURNACE)
+            if (targetType === BLOCKS.FURNACE) {
+                this.openFurnaceGUI(doorKey);
+                return;
+            }
+
             if (targetType === BLOCKS.CAMPFIRE && item && item.id === BLOCKS.RAW_MEAT) {
                 item.count--;
                 this.addToInventory(BLOCKS.COOKED_MEAT, 1);
@@ -2571,6 +2690,7 @@ export class MinecraftEngine {
             }
         }
 
+        // 4. Colocar o Bloco no Mundo
         this.placeBlock();
     }
 
@@ -2615,104 +2735,8 @@ export class MinecraftEngine {
         this.controls.unlock();
     }
 
-    getSourceList(type) {
-        if (type === 'chest') return this.chestData.get(this.activeChestKey);
-        if (type === 'hotbar') return this.hotbarSlots;
-        if (type === 'inv') return this.inventorySlots;
-        if (type === 'craft') return this.craftingSlots;
-        if (type === 'craft3x3') return this.crafting3x3Slots;
-        return null;
-    }
-
     handleSlotClick(type, index) {
         this.handleSlotClickUnified(type, index, false);
-    }
-
-    handleSlotClickUnified(listType, index, isRightClick = false) {
-        const targetList = this.getSourceList(listType);
-        if (!targetList) return;
-
-        const floatItem = document.getElementById('floating-item');
-
-        if (this.draggedSlot === null) {
-            const item = targetList[index];
-            if (item && item.count > 0) {
-                if (isRightClick) {
-                    this.draggedSlot = { type: listType, index, item: { id: item.id, count: 1 } };
-                    item.count--;
-                    if (item.count <= 0) {
-                        targetList[index] = null;
-                    }
-                } else {
-                    this.draggedSlot = { type: listType, index, item: { ...item } };
-                    targetList[index] = null;
-                }
-
-                if (floatItem) {
-                    floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                    floatItem.style.display = 'block';
-                }
-            }
-        } else {
-            const targetItem = targetList[index];
-            const held = this.draggedSlot.item;
-
-            if (isRightClick) {
-                if (!targetItem) {
-                    targetList[index] = { id: held.id, count: 1 };
-                    held.count--;
-                } else if (targetItem.id === held.id && targetItem.count < 64) {
-                    targetItem.count++;
-                    held.count--;
-                }
-
-                if (held.count <= 0) {
-                    this.draggedSlot = null;
-                    if (floatItem) floatItem.style.display = 'none';
-                }
-            } else {
-                if (!targetItem) {
-                    targetList[index] = held;
-                    this.draggedSlot = null;
-                    if (floatItem) floatItem.style.display = 'none';
-                } else if (targetItem.id === held.id) {
-                    const space = 64 - targetItem.count;
-                    const add = Math.min(space, held.count);
-                    targetItem.count += add;
-                    held.count -= add;
-
-                    if (held.count <= 0) {
-                        this.draggedSlot = null;
-                        if (floatItem) floatItem.style.display = 'none';
-                    }
-                } else {
-                    const sourceList = this.getSourceList(this.draggedSlot.type);
-                    if (sourceList) {
-                        const temp = targetList[index];
-                        targetList[index] = held;
-                        sourceList[this.draggedSlot.index] = temp;
-                        this.draggedSlot = null;
-                        if (floatItem) floatItem.style.display = 'none';
-                    } else {
-                        const temp = targetList[index];
-                        targetList[index] = held;
-                        this.draggedSlot = { type: listType, index, item: temp };
-                        if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
-                    }
-                }
-            }
-        }
-
-        if (listType === 'craft' || this.draggedSlot?.type === 'craft') this.checkCrafting();
-        if (listType === 'craft3x3' || this.draggedSlot?.type === 'craft3x3') this.checkCrafting3x3();
-
-        if (this.activeChestKey && (listType === 'chest' || this.draggedSlot?.type === 'chest')) {
-            this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
-        }
-
-        this.updateUI();
-        if (this.activeChestKey) this.updateChestUI();
-        this.updateCraftingTableUI();
     }
 
     updateChestUI() {
@@ -2895,15 +2919,19 @@ export class MinecraftEngine {
         const inv = document.getElementById('inventory-screen');
         const chest = document.getElementById('chest-screen');
         const craftTable = document.getElementById('crafting-table-screen');
+        const furnace = document.getElementById('furnace-screen');
 
-        const isOpen = inv.style.display === 'flex' || chest.style.display === 'flex' || craftTable.style.display === 'flex';
+        const isOpen = inv.style.display === 'flex' || chest.style.display === 'flex' || 
+                       craftTable.style.display === 'flex' || (furnace && furnace.style.display === 'flex');
 
         if (isOpen) {
             this.returnDraggedItemToInventory();
             inv.style.display = 'none';
             chest.style.display = 'none';
             craftTable.style.display = 'none';
+            if (furnace) furnace.style.display = 'none';
             this.activeChestKey = null;
+            this.activeFurnaceKey = null;
             this.controls.lock();
         } else {
             inv.style.display = 'flex';
@@ -3036,12 +3064,16 @@ export class MinecraftEngine {
     }
 
     updatePhysics(delta) {
+        const furnaceEl = document.getElementById('furnace-screen');
         const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                          document.getElementById('chest-screen').style.display === 'flex' || 
                          document.getElementById('crafting-table-screen').style.display === 'flex' || 
+                         (furnaceEl && furnaceEl.style.display === 'flex') || // <--- ADICIONA ISTO
                          document.getElementById('start-screen').style.display !== 'none' ||
                          document.getElementById('pause-menu').style.display === 'flex' ||
                          (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
+                         
+// ... o resto do código da física continua normal ...
 
         if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
             this.findSafeSpawn();
@@ -3318,6 +3350,7 @@ export class MinecraftEngine {
             this.updateMining(delta);
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
+            this.updateFurnaces(delta);
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
@@ -3405,6 +3438,155 @@ export class MinecraftEngine {
             document.getElementById('fps-val').innerText = Math.round(1 / delta);
         }
         this.renderer.render(this.scene, this.camera);
+    }
+
+    openFurnaceGUI(furnaceKey) {
+        this.activeFurnaceKey = furnaceKey;
+
+        if (!this.furnaceData.has(furnaceKey)) {
+            this.furnaceData.set(furnaceKey, {
+                slots: [null, null, null],
+                burnTime: 0,
+                maxBurnTime: 1,
+                cookProgress: 0
+            });
+        }
+
+        let screen = document.getElementById('furnace-screen');
+        if (screen) screen.remove();
+
+        screen = document.createElement('div');
+        screen.id = 'furnace-screen';
+        // Usamos position: fixed e 100vw/100vh para centralizar perfeitamente no navegador
+        screen.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.75); display: flex; justify-content: center;
+            align-items: center; z-index: 1200; font-family: 'Press Start 2P', monospace;
+            pointer-events: auto;
+        `;
+        
+        screen.innerHTML = `
+            <div style="background: #c6c6c6; border: 4px solid #000; padding: 20px; color: #333; width: 380px; box-shadow: inset -4px -4px 0px 0px #555, inset 4px 4px 0px 0px #fff; image-rendering: pixelated;">
+                <h3 style="margin-top:0; text-align:left; font-size:16px; font-weight:normal; margin-bottom:20px;">Fornalha</h3>
+                
+                <div style="display:flex; justify-content:center; align-items:center; gap: 30px; margin-bottom: 20px;">
+                    <div style="display:flex; flex-direction:column; gap:10px; align-items:center;">
+                        <div id="furnace-slot-0" style="background: #8b8b8b; border: 2px solid #373737; width: 36px; height: 36px; position: relative; cursor: pointer; box-shadow: inset 2px 2px 0px 0px #111;"></div>
+                        <div id="furnace-flame" style="font-size:20px; height:24px; display:flex; align-items:center; justify-content:center; text-shadow: 1px 1px 0 #000;">🔥</div>
+                        <div id="furnace-slot-1" style="background: #8b8b8b; border: 2px solid #373737; width: 36px; height: 36px; position: relative; cursor: pointer; box-shadow: inset 2px 2px 0px 0px #111;"></div>
+                    </div>
+                    <div id="furnace-progress" style="font-size:24px; color:#555;">➔</div>
+                    <div id="furnace-slot-2" style="background: #8b8b8b; border: 2px solid #373737; width: 44px; height: 44px; position: relative; cursor: pointer; box-shadow: inset 2px 2px 0px 0px #111;"></div>
+                </div>
+
+                <hr style="border-top: 2px solid #555; border-bottom: 2px solid #fff; margin-bottom: 10px;">
+                
+                <div id="furnace-inv-grid" style="display:grid; grid-template-columns: repeat(9, 1fr); gap:4px; margin-bottom: 8px;"></div>
+                <div id="furnace-hotbar-grid" style="display:grid; grid-template-columns: repeat(9, 1fr); gap:4px;"></div>
+            </div>
+        `;
+        
+        // Anexa diretamente ao document.body para garantir centralização total
+        document.body.appendChild(screen);
+
+        screen.addEventListener('click', (e) => {
+            if (e.target === screen) this.dropDraggedItem();
+        });
+
+        [0, 1, 2].forEach(i => {
+            const slot = document.getElementById(`furnace-slot-${i}`);
+            slot.innerHTML = '<div class="slot-icon" style="width:100%; height:100%; background-size:contain; background-repeat:no-repeat; background-position:center; pointer-events:none;"></div><span class="slot-count" style="position:absolute; bottom:2px; right:2px; font-size:12px; color:white; text-shadow:1px 1px 0 #000; pointer-events:none;"></span>';
+            slot.onmousedown = (e) => { e.preventDefault(); this.handleSlotClickUnified('furnace', i, e.button === 2); };
+            slot.oncontextmenu = (e) => e.preventDefault();
+        });
+
+        const invGrid = document.getElementById('furnace-inv-grid');
+        for (let i = 0; i < 27; i++) {
+            const slot = document.createElement('div');
+            slot.style.cssText = 'background: #8b8b8b; border: 2px solid #373737; width: 34px; height: 34px; position: relative; cursor: pointer; box-shadow: inset 2px 2px 0px 0px #111;';
+            slot.id = `furnace-inv-${i}`;
+            slot.innerHTML = '<div class="slot-icon" style="width:100%; height:100%; background-size:contain; background-repeat:no-repeat; background-position:center; pointer-events:none;"></div><span class="slot-count" style="position:absolute; bottom:2px; right:2px; font-size:10px; color:white; text-shadow:1px 1px 0 #000; pointer-events:none;"></span>';
+            slot.onmousedown = (e) => { e.preventDefault(); this.handleSlotClickUnified('inv', i, e.button === 2); };
+            slot.oncontextmenu = (e) => e.preventDefault();
+            invGrid.appendChild(slot);
+        }
+
+        const hotbarGrid = document.getElementById('furnace-hotbar-grid');
+        for (let i = 0; i < 9; i++) {
+            const slot = document.createElement('div');
+            slot.style.cssText = 'background: #8b8b8b; border: 2px solid #373737; width: 34px; height: 34px; position: relative; cursor: pointer; box-shadow: inset 2px 2px 0px 0px #111;';
+            slot.id = `furnace-hotbar-${i}`;
+            slot.innerHTML = '<div class="slot-icon" style="width:100%; height:100%; background-size:contain; background-repeat:no-repeat; background-position:center; pointer-events:none;"></div><span class="slot-count" style="position:absolute; bottom:2px; right:2px; font-size:10px; color:white; text-shadow:1px 1px 0 #000; pointer-events:none;"></span>';
+            slot.onmousedown = (e) => { e.preventDefault(); this.handleSlotClickUnified('hotbar', i, e.button === 2); };
+            slot.oncontextmenu = (e) => e.preventDefault();
+            hotbarGrid.appendChild(slot);
+        }
+
+        this.updateFurnaceUI();
+        screen.style.display = 'flex';
+        this.controls.unlock();
+    }
+
+    updateFurnaceUI() {
+        if (!this.activeFurnaceKey || !this.furnaceData.has(this.activeFurnaceKey)) return;
+
+        const furnace = this.furnaceData.get(this.activeFurnaceKey);
+
+        // Atualiza os 3 slots da fornalha
+        for (let i = 0; i < 3; i++) {
+            const slot = document.getElementById(`furnace-slot-${i}`);
+            if (!slot) continue;
+            const item = furnace.slots[i];
+            const iconEl = slot.querySelector('.slot-icon');
+            const countEl = slot.querySelector('.slot-count');
+
+            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
+            } else {
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
+            }
+        }
+
+        // Indicador de chama acesa / apagada
+        const flameEl = document.getElementById('furnace-flame');
+        if (flameEl) {
+            flameEl.style.opacity = furnace.burnTime > 0 ? '1.0' : '0.2';
+        }
+
+        // Indicador de seta de progresso
+        const progressEl = document.getElementById('furnace-progress');
+        if (progressEl) {
+            const input = furnace.slots[0];
+            const recipe = input ? SMELTING_RECIPES[input.id] : null;
+            if (recipe && furnace.cookProgress > 0) {
+                const percent = Math.round((furnace.cookProgress / recipe.cookTime) * 100);
+                progressEl.style.color = '#55ff55';
+                progressEl.innerText = `➔ ${percent}%`;
+            } else {
+                progressEl.style.color = '#aaa';
+                progressEl.innerText = '➔';
+            }
+        }
+
+        // Atualiza o inventário inferior
+        for (let i = 0; i < 27; i++) {
+            const slot = document.getElementById(`furnace-inv-${i}`);
+            if (!slot) continue;
+            const item = this.inventorySlots[i];
+            const iconEl = slot.querySelector('.slot-icon');
+            const countEl = slot.querySelector('.slot-count');
+
+            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count;
+            } else {
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
+            }
+        }
+        this.updateUI();
     }
 
     onWindowResize() {

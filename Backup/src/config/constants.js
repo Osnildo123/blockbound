@@ -9,6 +9,8 @@ export const BLOCKS = {
     GLASS: 28, DOOR: 29, CHEST: 30, BOW: 31, SNOW: 32, ICE: 33, CACTUS: 34,
     FLINT_STEEL: 35,
     CRAFTING_TABLE: 51,
+    FURNACE: 52,
+    IRON_INGOT: 53,
     WOOD_PICKAXE: 36, STONE_PICKAXE: 37, IRON_PICKAXE: 38, GOLD_PICKAXE: 39, DIAMOND_PICKAXE: 40,
     WOOD_AXE: 41, STONE_AXE: 42, IRON_AXE: 43, GOLD_AXE: 44, DIAMOND_AXE: 45,
     WOOD_SWORD: 46, STONE_SWORD: 47, IRON_SWORD: 48, GOLD_SWORD: 49, DIAMOND_SWORD: 50
@@ -68,13 +70,19 @@ export const BLOCK_TILES = {
     48: { name: 'Espada de Ferro', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 5, toolSpeed: 5.5 },
     49: { name: 'Espada de Ouro', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 4, toolSpeed: 8.0 },
     50: { name: 'Espada de Diamante', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 8, toolSpeed: 10.0 },
+    
     51: { name: 'Mesa de Trabalho', top: [6,3], side: [6,3], bottom: [0,1], isCraftingTable: true },
+    // Em src/config/constants.js:
+    // Mude o top/side do 52 de [6,1] (que é pedregulho) para outra posição:
+    52: { name: 'Fornalha', top: [7,3], side: [7,3], bottom: [7,3], isFurnace: true },
+    53: { name: 'Barra de Ferro', top: [5,2], plant: true }
 };
 
 export const BLOCK_PARTICLE_COLORS = {
     1: 0x55a02c, 2: 0x866043, 3: 0x737373, 4: 0x675231, 5: 0x2d7a1e, 6: 0xdbd3a2,
     7: 0xb8945f, 12: 0x333333, 13: 0x5a5a5a, 19: 0x1e1e1e, 20: 0xd89c74, 21: 0xfacc15,
-    22: 0x38bdf8, 28: 0xbae6fd, 29: 0x8f6f43, 30: 0x8b5a2b, 32: 0xf8fafc, 33: 0x38bdf8, 34: 0x15803d
+    22: 0x38bdf8, 28: 0xbae6fd, 29: 0x8f6f43, 30: 0x8b5a2b, 32: 0xf8fafc, 33: 0x38bdf8, 34: 0x15803d,
+    52: 0x5a5a5a, 53: 0xd89c74
 };
 
 export function isTransparentBlock(id) {
