@@ -1403,6 +1403,18 @@ spawnNightMobs(delta) {
                 floatItem.style.top = `${e.clientY}px`;
             }
         });
+
+        ['inventory-screen', 'chest-screen', 'crafting-table-screen'].forEach(id => {
+            const screenEl = document.getElementById(id);
+            if (screenEl) {
+                screenEl.addEventListener('click', (e) => {
+                    // Se clicou diretamente no fundo escuro (fora de uma janela/slot)
+                    if (e.target === screenEl) {
+                        this.dropDraggedItem();
+                    }
+                });
+            }
+        });
     }
 
     initUI() {
@@ -1499,20 +1511,40 @@ spawnNightMobs(delta) {
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot) {
-            if (!this.crafting3x3Slots[index]) {
+            // Se o slot já tem um item igual, incrementa 1 unidade
+            if (this.crafting3x3Slots[index] && this.crafting3x3Slots[index].id === this.draggedSlot.item.id) {
+                if (this.crafting3x3Slots[index].count < 64) {
+                    this.crafting3x3Slots[index].count++;
+                    this.draggedSlot.item.count--;
+                    if (this.draggedSlot.item.count <= 0) {
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    }
+                }
+            } else if (!this.crafting3x3Slots[index]) {
+                // Coloca 1 unidade da pilha segurada no slot
                 this.crafting3x3Slots[index] = { id: this.draggedSlot.item.id, count: 1 };
                 this.draggedSlot.item.count--;
                 if (this.draggedSlot.item.count <= 0) {
                     this.draggedSlot = null;
-                    floatItem.style.display = 'none';
+                    if (floatItem) floatItem.style.display = 'none';
                 }
+            } else {
+                // Se for um item diferente, troca
+                const temp = this.crafting3x3Slots[index];
+                this.crafting3x3Slots[index] = this.draggedSlot.item;
+                this.draggedSlot = { type: 'craft3x3', index, item: temp };
+                if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
             }
         } else {
+            // Pega na pilha do slot da mesa
             if (this.crafting3x3Slots[index]) {
                 this.draggedSlot = { type: 'craft3x3', index, item: { ...this.crafting3x3Slots[index] } };
                 this.crafting3x3Slots[index] = null;
-                floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                floatItem.style.display = 'block';
+                if (floatItem) {
+                    floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+                    floatItem.style.display = 'block';
+                }
             }
         }
         this.checkCrafting3x3();
@@ -1528,11 +1560,37 @@ spawnNightMobs(delta) {
 
         const ids = items.map(i => i.id);
 
+        // RECEITA 1: 1 Tronco de Madeira -> 4 Tábuas
+        if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
+            this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
+            return;
+        }
+
+        // RECEITA 2: 2 Tábuas -> 4 Tochas
+        if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
+            this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
+            return;
+        }
+
+        // RECEITA 3: 4 Tábuas -> Bancada de Trabalho
+        if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
+            this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
+            return;
+        }
+
+        // RECEITA 4: 4 Pedregulhos -> 4 Pedras Polidas
+        if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
+            this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
+            return;
+        }
+
+        // RECEITA 5: 8 Tábuas ao redor -> Baú
         if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
             this.craft3x3Result = { id: BLOCKS.CHEST, count: 1 };
             return;
         }
 
+        // RECEITA 6: Picareta de Diamante
         if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
@@ -1542,15 +1600,11 @@ spawnNightMobs(delta) {
             return;
         }
 
+        // RECEITA 7: Espada de Diamante
         if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
             this.craft3x3Result = { id: BLOCKS.DIAMOND_SWORD, count: 1 };
-            return;
-        }
-
-        if (ids.filter(id => id === BLOCKS.PLANK).length === 4) {
-            this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
             return;
         }
 
@@ -1694,30 +1748,76 @@ spawnNightMobs(delta) {
     }
 
     handleSlotClick(type, index) {
-        const targetList = type === 'hotbar' ? this.hotbarSlots : this.inventorySlots;
+        this.handleSlotClickUnified(type, index);
+    }
+
+    handleSlotClickUnified(listType, index) {
+        let targetList;
+        if (listType === 'chest') targetList = this.chestData.get(this.activeChestKey);
+        else if (listType === 'hotbar') targetList = this.hotbarSlots;
+        else targetList = this.inventorySlots;
+
+        if (!targetList) return;
+
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot === null) {
+            // PEGAR ITEM DO SLOT
             if (targetList[index] && targetList[index].count > 0) {
-                this.draggedSlot = { type, index, item: { ...targetList[index] } };
+                this.draggedSlot = { type: listType, index, item: { ...targetList[index] } };
                 targetList[index] = null;
-                floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
-                floatItem.style.display = 'block';
+                if (floatItem) {
+                    floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+                    floatItem.style.display = 'block';
+                }
                 this.updateUI();
+                if (this.activeChestKey) this.updateChestUI();
             }
         } else {
-            const temp = targetList[index];
-            targetList[index] = this.draggedSlot.item;
-            
-            if (temp) {
-                const sourceList = this.draggedSlot.type === 'hotbar' ? this.hotbarSlots : (this.draggedSlot.type === 'chest' ? this.chestData.get(this.activeChestKey) : this.inventorySlots);
-                sourceList[this.draggedSlot.index] = temp;
+            // LARGAR / EMPILHAR / TROCAR
+            const targetItem = targetList[index];
+
+            if (!targetItem) {
+                // Slot vazio: coloca o item segurado
+                targetList[index] = this.draggedSlot.item;
+                this.draggedSlot = null;
+                if (floatItem) floatItem.style.display = 'none';
+            } else if (targetItem.id === this.draggedSlot.item.id) {
+                // EMPILHAMENTO: Mesmo ID de bloco -> Soma as quantidades
+                const maxStack = 64;
+                const total = targetItem.count + this.draggedSlot.item.count;
+                if (total <= maxStack) {
+                    targetItem.count = total;
+                    this.draggedSlot = null;
+                    if (floatItem) floatItem.style.display = 'none';
+                } else {
+                    targetItem.count = maxStack;
+                    this.draggedSlot.item.count = total - maxStack;
+                }
+            } else {
+                // IDs DIFERENTES: Troca os itens de lugar
+                const temp = targetList[index];
+                targetList[index] = this.draggedSlot.item;
+
+                let sourceList;
+                if (this.draggedSlot.type === 'chest') sourceList = this.chestData.get(this.activeChestKey);
+                else if (this.draggedSlot.type === 'hotbar') sourceList = this.hotbarSlots;
+                else sourceList = this.inventorySlots;
+
+                if (sourceList) {
+                    sourceList[this.draggedSlot.index] = temp;
+                }
+
+                this.draggedSlot = null;
+                if (floatItem) floatItem.style.display = 'none';
             }
 
-            this.draggedSlot = null;
-            floatItem.style.display = 'none';
             this.updateUI();
             if (this.activeChestKey) this.updateChestUI();
+        }
+
+        if (this.activeChestKey && (listType === 'chest' || this.draggedSlot?.type === 'chest')) {
+            this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
         }
     }
 
@@ -2595,17 +2695,57 @@ spawnNightMobs(delta) {
     }
 
     addToInventory(typeId, count = 1) {
-        let slot = this.hotbarSlots.find(s => s && s.id === typeId);
-        if (slot) { slot.count += count; this.updateUI(); return; }
+        const maxStack = 64;
+        let remaining = count;
 
+        // 1. Tenta preencher slots existentes na Hotbar
+        for (let i = 0; i < this.hotbarSlots.length; i++) {
+            let s = this.hotbarSlots[i];
+            if (s && s.id === typeId && s.count < maxStack) {
+                const space = maxStack - s.count;
+                const add = Math.min(space, remaining);
+                s.count += add;
+                remaining -= add;
+                if (remaining <= 0) { this.updateUI(); return; }
+            }
+        }
+
+        // 2. Tenta preencher slots existentes no Inventário
+        for (let i = 0; i < this.inventorySlots.length; i++) {
+            let s = this.inventorySlots[i];
+            if (s && s.id === typeId && s.count < maxStack) {
+                const space = maxStack - s.count;
+                const add = Math.min(space, remaining);
+                s.count += add;
+                remaining -= add;
+                if (remaining <= 0) { this.updateUI(); return; }
+            }
+        }
+
+        // 3. Se ainda sobrou, ocupa slots vazios na Hotbar
         let emptyH = this.hotbarSlots.findIndex(s => s === null);
-        if (emptyH !== -1) { this.hotbarSlots[emptyH] = { id: typeId, count }; this.updateUI(); return; }
+        if (emptyH !== -1) {
+            const add = Math.min(maxStack, remaining);
+            this.hotbarSlots[emptyH] = { id: typeId, count: add };
+            remaining -= add;
+            if (remaining <= 0) { this.updateUI(); return; }
+        }
 
-        let invSlot = this.inventorySlots.find(s => s && s.id === typeId);
-        if (invSlot) { invSlot.count += count; this.updateUI(); return; }
-
+        // 4. Se ainda sobrou, ocupa slots vazios no Inventário
         let emptyI = this.inventorySlots.findIndex(s => s === null);
-        if (emptyI !== -1) { this.inventorySlots[emptyI] = { id: typeId, count }; }
+        if (emptyI !== -1) {
+            const add = Math.min(maxStack, remaining);
+            this.inventorySlots[emptyI] = { id: typeId, count: add };
+            remaining -= add;
+            if (remaining <= 0) { this.updateUI(); return; }
+        }
+
+        // 5. Se o inventário estiver 100% cheio, atira o restante para o chão
+        if (remaining > 0) {
+            this.spawnDroppedItem(this.position.x, this.position.y, this.position.z, typeId, remaining);
+        }
+
+        this.updateUI();
     }
 
     placeBlock() {
@@ -2688,6 +2828,61 @@ spawnNightMobs(delta) {
         const b = this.getBlock(x, y, z);
         if (b === BLOCKS.DOOR) return false;
         return b !== BLOCKS.AIR && b !== BLOCKS.WATER && !BLOCK_TILES[b]?.plant;
+    }
+
+    dropDraggedItem() {
+        if (this.draggedSlot && this.draggedSlot.item) {
+            const dir = new THREE.Vector3();
+            this.camera.getWorldDirection(dir);
+            
+            // Lança o item a 1.5 blocos de distância do jogador
+            this.spawnDroppedItem(
+                this.position.x + dir.x * 1.5,
+                this.position.y,
+                this.position.z + dir.z * 1.5,
+                this.draggedSlot.item.id,
+                this.draggedSlot.item.count
+            );
+
+            this.notify(`🗑️ Descartou ${this.draggedSlot.item.count}x item(ns)`);
+
+            this.draggedSlot = null;
+            const floatItem = document.getElementById('floating-item');
+            if (floatItem) floatItem.style.display = 'none';
+
+            this.updateUI();
+            if (this.activeChestKey) this.updateChestUI();
+            this.updateCraftingTableUI();
+        }
+    }
+
+    returnDraggedItemToInventory() {
+        if (this.draggedSlot && this.draggedSlot.item) {
+            this.addToInventory(this.draggedSlot.item.id, this.draggedSlot.item.count);
+            this.draggedSlot = null;
+            const floatItem = document.getElementById('floating-item');
+            if (floatItem) floatItem.style.display = 'none';
+        }
+    }
+
+    toggleInventory() {
+        const inv = document.getElementById('inventory-screen');
+        const chest = document.getElementById('chest-screen');
+        const craftTable = document.getElementById('crafting-table-screen');
+
+        const isOpen = inv.style.display === 'flex' || chest.style.display === 'flex' || craftTable.style.display === 'flex';
+
+        if (isOpen) {
+            this.returnDraggedItemToInventory(); // Devolve qualquer item segurado para o inventário ao fechar
+            inv.style.display = 'none';
+            chest.style.display = 'none';
+            craftTable.style.display = 'none';
+            this.activeChestKey = null;
+            this.controls.lock();
+        } else {
+            inv.style.display = 'flex';
+            this.controls.unlock();
+        }
     }
 
     checkAABBCollision(pos) {
@@ -3209,3 +3404,4 @@ spawnNightMobs(delta) {
         setTimeout(updateSize, 300);
     }
 }
+
