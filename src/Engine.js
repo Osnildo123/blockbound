@@ -1507,46 +1507,73 @@ spawnNightMobs(delta) {
         this.controls.unlock();
     }
 
-    handleCraft3x3SlotClick(index) {
+    handleCraft3x3SlotClick(index, isRightClick = false) {
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot) {
-            // Se o slot já tem um item igual, incrementa 1 unidade
-            if (this.crafting3x3Slots[index] && this.crafting3x3Slots[index].id === this.draggedSlot.item.id) {
-                if (this.crafting3x3Slots[index].count < 64) {
-                    this.crafting3x3Slots[index].count++;
-                    this.draggedSlot.item.count--;
-                    if (this.draggedSlot.item.count <= 0) {
-                        this.draggedSlot = null;
-                        if (floatItem) floatItem.style.display = 'none';
-                    }
+            const held = this.draggedSlot.item;
+            const target = this.crafting3x3Slots[index];
+
+            if (isRightClick) {
+                // CLIQUE DIREITO: Deposita Apenas 1 Item
+                if (!target) {
+                    this.crafting3x3Slots[index] = { id: held.id, count: 1 };
+                    held.count--;
+                } else if (target.id === held.id && target.count < 64) {
+                    target.count++;
+                    held.count--;
                 }
-            } else if (!this.crafting3x3Slots[index]) {
-                // Coloca 1 unidade da pilha segurada no slot
-                this.crafting3x3Slots[index] = { id: this.draggedSlot.item.id, count: 1 };
-                this.draggedSlot.item.count--;
-                if (this.draggedSlot.item.count <= 0) {
+
+                if (held.count <= 0) {
                     this.draggedSlot = null;
                     if (floatItem) floatItem.style.display = 'none';
                 }
             } else {
-                // Se for um item diferente, troca
-                const temp = this.crafting3x3Slots[index];
-                this.crafting3x3Slots[index] = this.draggedSlot.item;
-                this.draggedSlot = { type: 'craft3x3', index, item: temp };
-                if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+                // CLIQUE ESQUERDO: Deposita A PILHA INTEIRA ou Empilha
+                if (!target) {
+                    this.crafting3x3Slots[index] = { ...held };
+                    this.draggedSlot = null;
+                    if (floatItem) floatItem.style.display = 'none';
+                } else if (target.id === held.id) {
+                    const space = 64 - target.count;
+                    const add = Math.min(space, held.count);
+                    target.count += add;
+                    held.count -= add;
+
+                    if (held.count <= 0) {
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    }
+                } else {
+                    // Troca os itens de lugar
+                    const temp = this.crafting3x3Slots[index];
+                    this.crafting3x3Slots[index] = held;
+                    this.draggedSlot = { type: 'craft3x3', index, item: temp };
+                    if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
+                }
             }
         } else {
-            // Pega na pilha do slot da mesa
-            if (this.crafting3x3Slots[index]) {
-                this.draggedSlot = { type: 'craft3x3', index, item: { ...this.crafting3x3Slots[index] } };
-                this.crafting3x3Slots[index] = null;
+            // Se a mão estiver vazia
+            const target = this.crafting3x3Slots[index];
+            if (target) {
+                if (isRightClick && target.count > 1) {
+                    // CLIQUE DIREITO COM MÃO VAZIA: Pega Metade da Pilha
+                    const half = Math.ceil(target.count / 2);
+                    this.draggedSlot = { type: 'craft3x3', index, item: { id: target.id, count: half } };
+                    target.count -= half;
+                } else {
+                    // CLIQUE ESQUERDO COM MÃO VAZIA: Pega a Pilha Toda
+                    this.draggedSlot = { type: 'craft3x3', index, item: { ...target } };
+                    this.crafting3x3Slots[index] = null;
+                }
+
                 if (floatItem) {
                     floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
                     floatItem.style.display = 'block';
                 }
             }
         }
+
         this.checkCrafting3x3();
         this.updateCraftingTableUI();
     }
@@ -1612,35 +1639,102 @@ spawnNightMobs(delta) {
     }
 
     takeCraft3x3Result() {
-        if (this.craft3x3Result) {
-            this.addToInventory(this.craft3x3Result.id, this.craft3x3Result.count);
-            for (let i = 0; i < 9; i++) {
-                if (this.crafting3x3Slots[i]) {
-                    this.crafting3x3Slots[i].count--;
-                    if (this.crafting3x3Slots[i].count <= 0) {
-                        this.crafting3x3Slots[i] = null;
-                    }
+        if (!this.craft3x3Result) return;
+
+        const result = this.craft3x3Result;
+        const floatItem = document.getElementById('floating-item');
+
+        // 1. Verifica se pode pegar na mão ou empilhar na mão
+        if (!this.draggedSlot) {
+            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
+        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
+            this.draggedSlot.item.count += result.count;
+        } else {
+            return; // Mão ocupada com outro item ou pilha cheia
+        }
+
+        // 2. Consome 1 unidade de cada ingrediente presente na grelha 3x3
+        for (let i = 0; i < 9; i++) {
+            if (this.crafting3x3Slots[i]) {
+                this.crafting3x3Slots[i].count--;
+                if (this.crafting3x3Slots[i].count <= 0) {
+                    this.crafting3x3Slots[i] = null;
                 }
             }
-            this.checkCrafting3x3();
-            this.updateCraftingTableUI();
-            this.notify("Item Especial Fabricado na Bancada!");
         }
+
+        // 3. Atualiza o item a flutuar na mão
+        if (floatItem) {
+            floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
+            floatItem.style.display = 'block';
+        }
+
+        // 4. Re-verifica a receita para saber se ainda sobram troncos na mesa
+        this.checkCrafting3x3();
+        this.updateCraftingTableUI();
+        if (this.sound) this.sound.playPlace();
+    }
+
+    openCraftingTableGUI() {
+        const grid = document.getElementById('craft3x3-grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < 9; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'gui-slot';
+            slot.id = `craft3x3-slot-${i}`;
+            // Adicionado icon e count para exibir números dentro da bancada 3x3
+            slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
+            
+            // Botão Esquerdo = Coloca pilha inteira / Botão Direito = Coloca apenas 1 item
+            slot.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.handleCraft3x3SlotClick(i, e.button === 2);
+            });
+            slot.addEventListener('contextmenu', (e) => e.preventDefault());
+            grid.appendChild(slot);
+        }
+
+        const invGrid = document.getElementById('craft3x3-inv-grid');
+        invGrid.innerHTML = '';
+        for (let i = 0; i < 27; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'gui-slot';
+            slot.id = `craft3x3-inv-${i}`;
+            slot.innerHTML = `<div class="slot-icon"></div><span class="slot-count"></span>`;
+            slot.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.handleSlotClickUnified('inv', i, e.button === 2);
+            });
+            slot.addEventListener('contextmenu', (e) => e.preventDefault());
+            invGrid.appendChild(slot);
+        }
+
+        document.getElementById('craft3x3-result').onclick = () => this.takeCraft3x3Result();
+
+        this.updateCraftingTableUI();
+        document.getElementById('crafting-table-screen').style.display = 'flex';
+        this.controls.unlock();
     }
 
     updateCraftingTableUI() {
+        // Atualiza os 9 slots da bancada 3x3 com ícone E quantidade
         for (let i = 0; i < 9; i++) {
             const slot = document.getElementById(`craft3x3-slot-${i}`);
             if (!slot) continue;
             const item = this.crafting3x3Slots[i];
-            if (item && BLOCK_ICONS[item.id]) {
-                slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                slot.style.backgroundSize = 'cover';
+            const iconEl = slot.querySelector('.slot-icon');
+            const countEl = slot.querySelector('.slot-count');
+
+            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
             } else {
-                slot.style.backgroundImage = 'none';
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
             }
         }
 
+        // Atualiza o resultado da bancada
         const resSlot = document.getElementById('craft3x3-result');
         if (resSlot) {
             if (this.craft3x3Result && BLOCK_ICONS[this.craft3x3Result.id]) {
@@ -1651,6 +1745,7 @@ spawnNightMobs(delta) {
             }
         }
 
+        // Atualiza o inventário inferior da janela
         for (let i = 0; i < 27; i++) {
             const slot = document.getElementById(`craft3x3-inv-${i}`);
             if (!slot) continue;
@@ -1659,11 +1754,11 @@ spawnNightMobs(delta) {
             const countEl = slot.querySelector('.slot-count');
 
             if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                countEl.innerText = item.count;
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count;
             } else {
-                iconEl.style.backgroundImage = 'none';
-                countEl.innerText = '';
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
             }
         }
         this.updateUI();
@@ -1751,7 +1846,7 @@ spawnNightMobs(delta) {
         this.handleSlotClickUnified(type, index);
     }
 
-    handleSlotClickUnified(listType, index) {
+    handleSlotClickUnified(listType, index, isRightClick = false) {
         let targetList;
         if (listType === 'chest') targetList = this.chestData.get(this.activeChestKey);
         else if (listType === 'hotbar') targetList = this.hotbarSlots;
@@ -1762,63 +1857,72 @@ spawnNightMobs(delta) {
         const floatItem = document.getElementById('floating-item');
 
         if (this.draggedSlot === null) {
-            // PEGAR ITEM DO SLOT
-            if (targetList[index] && targetList[index].count > 0) {
-                this.draggedSlot = { type: listType, index, item: { ...targetList[index] } };
-                targetList[index] = null;
+            // PEGAR ITEM
+            const item = targetList[index];
+            if (item && item.count > 0) {
+                if (isRightClick && item.count > 1) {
+                    // Clique direito pega metade
+                    const half = Math.ceil(item.count / 2);
+                    this.draggedSlot = { type: listType, index, item: { id: item.id, count: half } };
+                    item.count -= half;
+                } else {
+                    // Clique esquerdo pega tudo
+                    this.draggedSlot = { type: listType, index, item: { ...item } };
+                    targetList[index] = null;
+                }
+
                 if (floatItem) {
                     floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
                     floatItem.style.display = 'block';
                 }
-                this.updateUI();
-                if (this.activeChestKey) this.updateChestUI();
             }
         } else {
-            // LARGAR / EMPILHAR / TROCAR
+            // LARGAR / EMPILHAR
             const targetItem = targetList[index];
+            const held = this.draggedSlot.item;
 
-            if (!targetItem) {
-                // Slot vazio: coloca o item segurado
-                targetList[index] = this.draggedSlot.item;
-                this.draggedSlot = null;
-                if (floatItem) floatItem.style.display = 'none';
-            } else if (targetItem.id === this.draggedSlot.item.id) {
-                // EMPILHAMENTO: Mesmo ID de bloco -> Soma as quantidades
-                const maxStack = 64;
-                const total = targetItem.count + this.draggedSlot.item.count;
-                if (total <= maxStack) {
-                    targetItem.count = total;
+            if (isRightClick) {
+                // Clique direito deposita 1 por 1
+                if (!targetItem) {
+                    targetList[index] = { id: held.id, count: 1 };
+                    held.count--;
+                } else if (targetItem.id === held.id && targetItem.count < 64) {
+                    targetItem.count++;
+                    held.count--;
+                }
+
+                if (held.count <= 0) {
                     this.draggedSlot = null;
                     if (floatItem) floatItem.style.display = 'none';
-                } else {
-                    targetItem.count = maxStack;
-                    this.draggedSlot.item.count = total - maxStack;
                 }
             } else {
-                // IDs DIFERENTES: Troca os itens de lugar
-                const temp = targetList[index];
-                targetList[index] = this.draggedSlot.item;
+                // Clique esquerdo deposita tudo / empilha
+                if (!targetItem) {
+                    targetList[index] = held;
+                    this.draggedSlot = null;
+                    if (floatItem) floatItem.style.display = 'none';
+                } else if (targetItem.id === held.id) {
+                    const space = 64 - targetItem.count;
+                    const add = Math.min(space, held.count);
+                    targetItem.count += add;
+                    held.count -= add;
 
-                let sourceList;
-                if (this.draggedSlot.type === 'chest') sourceList = this.chestData.get(this.activeChestKey);
-                else if (this.draggedSlot.type === 'hotbar') sourceList = this.hotbarSlots;
-                else sourceList = this.inventorySlots;
-
-                if (sourceList) {
-                    sourceList[this.draggedSlot.index] = temp;
+                    if (held.count <= 0) {
+                        this.draggedSlot = null;
+                        if (floatItem) floatItem.style.display = 'none';
+                    }
+                } else {
+                    // Troca os dois itens
+                    const temp = targetList[index];
+                    targetList[index] = held;
+                    this.draggedSlot = { type: listType, index, item: temp };
+                    if (floatItem) floatItem.style.backgroundImage = `url(${BLOCK_ICONS[temp.id]})`;
                 }
-
-                this.draggedSlot = null;
-                if (floatItem) floatItem.style.display = 'none';
             }
-
-            this.updateUI();
-            if (this.activeChestKey) this.updateChestUI();
         }
 
-        if (this.activeChestKey && (listType === 'chest' || this.draggedSlot?.type === 'chest')) {
-            this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
-        }
+        this.updateUI();
+        if (this.activeChestKey) this.updateChestUI();
     }
 
     selectSlot(idx) {
