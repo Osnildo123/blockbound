@@ -44,6 +44,7 @@ import { DroppedItem } from './entities/DroppedItem.js';
 export class MinecraftEngine {
     updateFurnaces(delta) {
         if (!this.furnaceData) return;
+        if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
 
         for (let [key, furnace] of this.furnaceData.entries()) {
             const input = furnace.slots[0];
@@ -52,12 +53,12 @@ export class MinecraftEngine {
 
             const recipe = input ? SMELTING_RECIPES[input.id] : null;
 
-            // 1. Se a fornalha está a queimar combustível, reduz o temporizador
+            // 1. Reduz o tempo de queima
             if (furnace.burnTime > 0) {
                 furnace.burnTime -= delta;
             }
 
-            // 2. Se o combustível acabou, tenta consumir novo combustível da pilha
+            // 2. Consome novo combustível se o fogo apagar
             if (furnace.burnTime <= 0 && recipe) {
                 if (fuel && FUEL_BURN_TIMES[fuel.id] && (!output || (output.id === recipe.result && output.count < 64))) {
                     furnace.burnTime = FUEL_BURN_TIMES[fuel.id];
@@ -67,36 +68,58 @@ export class MinecraftEngine {
                 }
             }
 
-            // 3. Se há fogo E há uma receita válida, avança o cozimento
+            // 3. Avança o processo de cozimento
             if (furnace.burnTime > 0 && recipe) {
                 furnace.cookProgress += delta;
 
-                // Item pronto!
+                // Item finalizado
                 if (furnace.cookProgress >= recipe.cookTime) {
                     furnace.cookProgress = 0;
 
-                    // Consome 1 ingrediente
                     input.count--;
                     if (input.count <= 0) furnace.slots[0] = null;
 
-                    // Adiciona ao resultado
                     if (!furnace.slots[2]) {
                         furnace.slots[2] = { id: recipe.result, count: recipe.count || 1 };
                     } else {
                         furnace.slots[2].count += (recipe.count || 1);
                     }
                 }
+
+                // --- EFEITOS VISUAIS EM TEMPO REAL ---
+                const [fx, fy, fz] = key.split(',').map(Number);
+
+                // Criar Luz de Fogo quentinha no bloco da fornalha
+                if (!this.placedFurnaceLights.has(key)) {
+                    const fLight = new THREE.PointLight(0xff6600, 2.3, 14);
+                    fLight.position.set(fx + 0.5, fy + 0.5, fz + 0.5);
+                    this.scene.add(fLight);
+                    this.placedFurnaceLights.set(key, fLight);
+                }
+
+                // Gerar Partículas de Fumo/Fagulhas
+                if (Math.random() < 0.35 && this.particleSystem) {
+                    const pColor = Math.random() < 0.5 ? 0xff4500 : 0x555555;
+                    this.particleSystem.createBlockBreakParticles(fx + 0.5, fy + 0.9, fz + 0.5, pColor);
+                }
+
             } else {
-                // Se o fogo apagar ou tirar o item, o progresso arrefecem suavemente
+                // Arrefecimento quando apagada
                 furnace.cookProgress = Math.max(0, furnace.cookProgress - delta * 2);
+
+                // Remover a Luz quando a fornalha apaga
+                if (this.placedFurnaceLights.has(key)) {
+                    this.scene.remove(this.placedFurnaceLights.get(key));
+                    this.placedFurnaceLights.delete(key);
+                }
             }
 
-            // Se o jogador estiver com a janela desta fornalha aberta, atualiza a UI
             if (this.activeFurnaceKey === key) {
                 this.updateFurnaceUI();
             }
         }
     }
+
     enterFullscreen() {
         const elem = document.documentElement;
         if (!document.fullscreenElement && !document.webkitFullscreenElement) {
@@ -2184,7 +2207,7 @@ export class MinecraftEngine {
             { dir: [-1, 0, 0], corners: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], tileKey: 'side' },
             { dir: [0, 1, 0], corners: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]], tileKey: 'top' },
             { dir: [0, -1, 0], corners: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], tileKey: 'bottom' },
-            { dir: [0, 0, 1], corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], tileKey: 'side' },
+            { dir: [0, 0, 1], corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], tileKey: 'front' }, // <-- MUDADO PARA 'front'
             { dir: [0, 0, -1], corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], tileKey: 'side' }
         ];
 
@@ -2257,7 +2280,10 @@ export class MinecraftEngine {
                                 targetCol.push(aoVal, aoVal, aoVal);
                             }
 
-                            const tileCoord = bInfo[f.tileKey];
+                            // Substitua a linha antiga do tileCoord por esta:
+                            const tileCoord = (f.tileKey === 'front' && bInfo.front) 
+                                ? bInfo.front 
+                                : (bInfo[f.tileKey] || bInfo.side || bInfo.top);
                             const uMin = tileCoord[0] * (16 / 128);
                             const vMin = 1.0 - ((tileCoord[1] + 1) * (16 / 128));
                             const uMax = uMin + (16 / 128);
