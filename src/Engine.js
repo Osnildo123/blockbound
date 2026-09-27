@@ -164,12 +164,13 @@ export class MinecraftEngine {
         this.applyBlockLight(rx - 1, ry + 1, rz - 1, BLOCKS.TOTEM);
     }
 
-    updateFurnaces(delta) {
-        if (!this.furnaceData) return;
-        if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
+    // ============================================================
+    // MÉTODOS DE RECEITAS E COMBUSTÍVEIS DA FORNALHA
+    // ============================================================
 
-        // Tabelas de receitas e combustíveis (carregadas dinamicamente a cada frame)
-        const smeltingRecipes = {
+    getSmeltingRecipe(itemId) {
+        if (!itemId) return null;
+        const recipes = {
             [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
             [BLOCKS.GOLD_ORE]: { result: 56, cookTime: 8.0 },
             [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
@@ -178,8 +179,12 @@ export class MinecraftEngine {
             [BLOCKS.RAW_MEAT]: { result: BLOCKS.COOKED_MEAT, cookTime: 5.0 },
             [BLOCKS.WOOD]: { result: BLOCKS.PLANK, count: 4, cookTime: 3.0 }
         };
+        return recipes[itemId] || null;
+    }
 
-        const fuelBurnTimes = {
+    getFuelBurnTime(itemId) {
+        if (!itemId) return 0;
+        const fuels = {
             [BLOCKS.COAL_ORE]: 80.0,
             [BLOCKS.WOOD]: 15.0,
             [BLOCKS.PLANK]: 10.0,
@@ -187,13 +192,23 @@ export class MinecraftEngine {
             [BLOCKS.CHEST]: 15.0,
             [BLOCKS.DOOR]: 10.0
         };
+        return fuels[itemId] || 0;
+    }
+
+    // ============================================================
+    // LOOP PRINCIPAL DA FORNALHA
+    // ============================================================
+
+    updateFurnaces(delta) {
+        if (!this.furnaceData) return;
+        if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
 
         for (let [key, furnace] of this.furnaceData.entries()) {
             const input = furnace.slots[0];
             const fuel = furnace.slots[1];
             const output = furnace.slots[2];
 
-            const recipe = input ? smeltingRecipes[input.id] : null;
+            const recipe = input ? this.getSmeltingRecipe(input.id) : null;
 
             // 1. Reduz o tempo de queima atual
             if (furnace.burnTime > 0) {
@@ -202,7 +217,7 @@ export class MinecraftEngine {
 
             // 2. Consome novo combustível se o fogo apagar
             if (furnace.burnTime <= 0 && recipe) {
-                const burnTime = fuel ? (fuelBurnTimes[fuel.id] || 0) : 0;
+                const burnTime = fuel ? this.getFuelBurnTime(fuel.id) : 0;
                 const canOutput = !output || (output.id === recipe.result && output.count < 64);
 
                 if (burnTime > 0 && canOutput) {
@@ -3754,8 +3769,6 @@ export class MinecraftEngine {
         }
 
         const isLAN = this.network && (this.network.isHost || (this.network.netConn && this.network.netConn.open));
-        
-        // DECLARAR isClientLAN AQUI NO TOPO DO ANIMATE PARA ESTAR DISPONÍVEL EM TODO O MÉTODO:
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
 
         if (!isLAN && (this.isPaused || document.getElementById('pause-menu').style.display === 'flex')) {
@@ -3771,7 +3784,7 @@ export class MinecraftEngine {
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
-            this.updateWaterFlow(delta);
+            this.updateWaterFlow(delta); // Processa a água com o algoritmo otimizado
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
@@ -3784,7 +3797,6 @@ export class MinecraftEngine {
 
             this.spawnNightMobs(delta);
 
-            // AGORA isClientLAN FUNCIONA PERFEITAMENTE AQUI DENTRO SEM ERROS:
             this.mobs.forEach(mob => {
                 if (isClientLAN) {
                     if (mob.targetPos) {
@@ -3840,7 +3852,6 @@ export class MinecraftEngine {
                 door.group.rotation.y = THREE.MathUtils.lerp(door.group.rotation.y, door.targetRot, 0.2);
             }
 
-            // ATUALIZAÇÃO DAS FLECHAS (AGORA A EXECUÇÃO CHEGA AQUI!):
             if (this.arrows && this.arrows.length > 0) {
                 for (let i = this.arrows.length - 1; i >= 0; i--) {
                     const arrow = this.arrows[i];
@@ -3982,7 +3993,7 @@ export class MinecraftEngine {
         const progressEl = document.getElementById('furnace-progress');
         if (progressEl) {
             const input = furnace.slots[0];
-            const recipe = input ? SMELTING_RECIPES[input.id] : null;
+            const recipe = input ? this.getSmeltingRecipe(input.id) : null;
             if (recipe && furnace.cookProgress > 0) {
                 const percent = Math.round((furnace.cookProgress / recipe.cookTime) * 100);
                 progressEl.style.color = '#55ff55';
@@ -4009,9 +4020,27 @@ export class MinecraftEngine {
                 if (countEl) countEl.innerText = '';
             }
         }
+
+        // Atualiza a hotbar inferior na janela da fornalha
+        for (let i = 0; i < 9; i++) {
+            const slot = document.getElementById(`furnace-hotbar-${i}`);
+            if (!slot) continue;
+            const item = this.hotbarSlots[i];
+            const iconEl = slot.querySelector('.slot-icon');
+            const countEl = slot.querySelector('.slot-count');
+
+            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                if (countEl) countEl.innerText = item.count;
+            } else {
+                if (iconEl) iconEl.style.backgroundImage = 'none';
+                if (countEl) countEl.innerText = '';
+            }
+        }
+
         this.updateUI();
     }
-
+    
     onWindowResize() {
         if (!this.camera || !this.renderer) return;
 
