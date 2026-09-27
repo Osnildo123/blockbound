@@ -16,7 +16,8 @@ export const BLOCKS = {
     IRON_INGOT: 53,
     BUCKET: 54,        // Balde Vazio
     WATER_BUCKET: 55,  // Balde com Água
-    GOLD_INGOT: 56     // Barra de Ouro
+    GOLD_INGOT: 56,    // Barra de Ouro
+    LAVA: 57           // Lava Incandescente
 };
 
 export const BLOCK_TILES = {
@@ -76,34 +77,33 @@ export const BLOCK_TILES = {
     
     51: { 
         name: 'Mesa de Trabalho', 
-        top: [6, 4],     // Nova textura desenhada (Grelha de Crafting)
-        side: [0, 1],    // Textura de Tábua nos lados
-        bottom: [0, 1],  // Textura de Tábua no fundo
+        top: [6, 4], 
+        side: [0, 1], 
+        bottom: [0, 1], 
         isCraftingTable: true 
     },
     
     52: { 
         name: 'Fornalha', 
-        top: [6, 1],      // Pedregulho no topo
-        bottom: [6, 1],   // Pedregulho na base
-        side: [6, 1],     // Pedregulho nos lados e trás
-        front: [5, 4],    // <-- NOVA POSIÇÃO LIVRE
+        top: [6, 1], 
+        bottom: [6, 1], 
+        side: [6, 1], 
+        front: [5, 4], 
         isFurnace: true 
     },
 
-    // IDs das Barras e Baldes configurados como ITENS (isTool: true)
-    // No final do BLOCK_TILES:
     53: { name: 'Barra de Ferro', top: [3, 3], isTool: true },
     54: { name: 'Balde', top: [0, 5], plant: true, isTool: true },
     55: { name: 'Balde com Água', top: [1, 5], plant: true, isTool: true },
-    56: { name: 'Barra de Ouro', top: [6, 2], isTool: true } // <-- ADICIONA ESTA LINHA
+    56: { name: 'Barra de Ouro', top: [6, 2], isTool: true },
+    57: { name: 'Lava', top: [2, 5], side: [2, 5], bottom: [2, 5], light: true, lava: true }
 };
 
 export const BLOCK_PARTICLE_COLORS = {
     1: 0x55a02c, 2: 0x866043, 3: 0x737373, 4: 0x675231, 5: 0x2d7a1e, 6: 0xdbd3a2,
     7: 0xb8945f, 12: 0x333333, 13: 0x5a5a5a, 19: 0x1e1e1e, 20: 0xd89c74, 21: 0xfacc15,
     22: 0x38bdf8, 28: 0xbae6fd, 29: 0x8f6f43, 30: 0x8b5a2b, 32: 0xf8fafc, 33: 0x38bdf8, 34: 0x15803d,
-    52: 0x5a5a5a, 53: 0xd89c74
+    52: 0x5a5a5a, 53: 0xd89c74, 57: 0xff4500
 };
 
 export function isTransparentBlock(id) {
@@ -125,27 +125,22 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const ctx = ATLAS_CANVAS.getContext('2d');
     const tileSize = 16; 
     
-    // Posição no atlas livre (Coluna 5, Linha 4)
-    const tileX = 5 * tileSize; // <-- MUDOU AQUI
-    const tileY = 4 * tileSize; // <-- MUDOU AQUI
+    const tileX = 5 * tileSize;
+    const tileY = 4 * tileSize;
 
-    // Fundo cinza (pedra)
     ctx.fillStyle = '#686868';
     ctx.fillRect(tileX, tileY, tileSize, tileSize);
     
-    // Contorno interior
     ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(tileX + 1, tileY + 1, 14, 14);
     ctx.fillStyle = '#888888';
     ctx.fillRect(tileX + 2, tileY + 2, 12, 12);
 
-    // Abertura superior
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(tileX + 3, tileY + 3, 10, 4);
     ctx.fillStyle = '#0f0f0f';
     ctx.fillRect(tileX + 4, tileY + 4, 8, 2);
 
-    // Abertura inferior
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(tileX + 3, tileY + 9, 10, 4);
     ctx.fillStyle = '#0f0f0f';
@@ -160,39 +155,32 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const ctx = ATLAS_CANVAS.getContext('2d');
     const tileSize = 16; 
     
-    // Posição no atlas livre (Coluna 6, Linha 4)
     const tileX = 6 * tileSize; 
     const tileY = 4 * tileSize; 
 
-    // Fundo base (madeira de tábua)
     ctx.fillStyle = '#b8945f';
     ctx.fillRect(tileX, tileY, tileSize, tileSize);
     
-    // Moldura mais escura
     ctx.strokeStyle = '#8a6b3c';
     ctx.lineWidth = 1;
     ctx.strokeRect(tileX + 0.5, tileY + 0.5, 15, 15);
 
-    // Grelha 3x3 clássica
     ctx.fillStyle = '#6b4e28';
     
-    // Linhas verticais
     ctx.fillRect(tileX + 5, tileY + 2, 1, 12);
     ctx.fillRect(tileX + 10, tileY + 2, 1, 12);
     
-    // Linhas horizontais
     ctx.fillRect(tileX + 2, tileY + 5, 12, 1);
     ctx.fillRect(tileX + 2, tileY + 10, 12, 1);
 
-    // Ferramentas no canto (um serrote e um martelo em pixels!)
-    ctx.fillStyle = '#888888'; // Lâmina
+    ctx.fillStyle = '#888888';
     ctx.fillRect(tileX + 1, tileY + 1, 4, 2);
-    ctx.fillStyle = '#3a2311'; // Cabo
+    ctx.fillStyle = '#3a2311';
     ctx.fillRect(tileX + 1, tileY + 3, 2, 2);
 
-    ctx.fillStyle = '#4a4a4a'; // Cabeça do martelo
+    ctx.fillStyle = '#4a4a4a';
     ctx.fillRect(tileX + 11, tileY + 13, 4, 2);
-    ctx.fillStyle = '#5c3a21'; // Cabo do martelo
+    ctx.fillStyle = '#5c3a21';
     ctx.fillRect(tileX + 12, tileY + 9, 2, 4);
 
     if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
@@ -307,7 +295,57 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
-// REDESENHA O TOPO DA GRAMA (Coluna 0, Linha 0) - BASEADO NA IMAGEM
+// DESENHA A LAVA NO ATLAS (Coluna 2, Linha 5)
+// ============================================================
+(function drawLava() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16; 
+    const tileX = 2 * tileSize; 
+    const tileY = 5 * tileSize; 
+
+    const pixels = [
+        "RRRROOOOORRRROOO",
+        "RROOOOOOORROOOOO",
+        "OOOOOYYYYOOOOOYY",
+        "OOOYYYYYYYOOYYYY",
+        "OYYYYYYRRYYYYYRR",
+        "YYYYYRRRRYYRRRRR",
+        "YYYRRRRRRRRRRRRR",
+        "YRRRRROOOORRRRRO",
+        "RRRROOOOOOORROOO",
+        "RROOOOOOYYYYOOOY",
+        "OOOOOYYYYYYYYYYY",
+        "OOYYYYYYYYYYYRRR",
+        "YYYYYYYYYRRRRRRR",
+        "YYYYYRRRRRRRROOO",
+        "YYRRRRRRRROOOOOO",
+        "RRRRRRROOOOOOOOO"
+    ];
+
+    const palette = {
+        'R': '#8b0000', // Magma escuro / crosta
+        'O': '#ff4500', // Laranja incandescent
+        'Y': '#ffcc00'  // Amarelo brilhante
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// REDESENHA O TOPO DA GRAMA (Coluna 0, Linha 0)
 // ============================================================
 (function drawGrassTop() {
     if (!ATLAS_CANVAS) return;
@@ -318,7 +356,6 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const tileX = 0 * tileSize;
     const tileY = 0 * tileSize;
 
-    // Matriz 16x16 idêntica à imagem enviada
     const pixels = [
         "4213234123214534",
         "3422312233242314",
@@ -339,11 +376,11 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     ];
 
     const palette = {
-        '1': '#355320', // Sombra profunda
-        '2': '#3e6326', // Verde escuro
-        '3': '#4d7c30', // Verde médio-escuro
-        '4': '#5c913b', // Verde tom base
-        '5': '#6aa244'  // Verde suave / brilho
+        '1': '#355320',
+        '2': '#3e6326',
+        '3': '#4d7c30',
+        '4': '#5c913b',
+        '5': '#6aa244'
     };
 
     for (let r = 0; r < 16; r++) {
@@ -356,7 +393,7 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
-// REDESENHA O LADO DA GRAMA (Coluna 1, Linha 0) - TERRA MENOS PIXELADA
+// REDESENHA O LADO DA GRAMA (Coluna 1, Linha 0)
 // ============================================================
 (function drawGrassSide() {
     if (!ATLAS_CANVAS) return;
@@ -367,7 +404,6 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const tileX = 1 * tileSize;
     const tileY = 0 * tileSize;
 
-    // Matriz 16x16: Grama no topo, terra mais "lisa" em blocos maiores e menos ruído
     const pixels = [
         "4323454323443234",
         "3432314323143231",
@@ -388,23 +424,18 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     ];
 
     const palette = {
-        // Relva (Mantém a textura verde musgo)
-        '1': '#355320', // Verde sombra
-        '2': '#3e6326', // Verde escuro
-        '3': '#4d7c30', // Verde médio
-        '4': '#5c913b', // Verde claro
-        '5': '#6aa244', // Verde brilho
-
-        // Terra (Cores originais aquecidas)
-        'D': '#3b2315', // Sombra escura da terra
-        'd': '#4d301d', // Terra escura
-        'M': '#644027', // Terra tom base (Blocos maiores, menos variação)
-        'L': '#7c5234', // Terra clara
-        'H': '#966543', // Brilho/Highlight da terra
-
-        // Pedrinhas (Pontuais, sem excesso)
-        'P': '#6e6e6e', // Cinza claro da pedra
-        'p': '#484848'  // Sombra da pedra
+        '1': '#355320',
+        '2': '#3e6326',
+        '3': '#4d7c30',
+        '4': '#5c913b',
+        '5': '#6aa244',
+        'D': '#3b2315',
+        'd': '#4d301d',
+        'M': '#644027',
+        'L': '#7c5234',
+        'H': '#966543',
+        'P': '#6e6e6e',
+        'p': '#484848'
     };
 
     for (let r = 0; r < 16; r++) {
@@ -421,7 +452,7 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
-// REDESENHA A CASCA DO TRONCO (Coluna 4, Linha 0) - BLOCOS QUADRADOS
+// REDESENHA A CASCA DO TRONCO (Coluna 4, Linha 0)
 // ============================================================
 (function drawWoodSide() {
     if (!ATLAS_CANVAS) return;
@@ -432,7 +463,6 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const tileX = 4 * tileSize;
     const tileY = 0 * tileSize;
 
-    // Matriz 16x16: Padrão em blocos 2x2 para um visual mais quadrado e menos listrado
     const pixels = [
         "3341133441334133",
         "3341133441334133",
@@ -453,9 +483,9 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     ];
 
     const palette = {
-        '1': '#3a2514', // Fissura da casca (Clareado em relação ao anterior #2a1a0e)
-        '3': '#5f4024', // Castanho médio base (Áreas lisas)
-        '4': '#7d5833'  // Castanho claro de madeira / Casca descascada
+        '1': '#3a2514',
+        '3': '#5f4024',
+        '4': '#7d5833'
     };
 
     for (let r = 0; r < 16; r++) {
@@ -481,7 +511,6 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     const tileX = 5 * tileSize;
     const tileY = 0 * tileSize;
 
-    // Anéis de crescimento interior com borda de casca
     const pixels = [
         "KKKKKKKKKKKKKKKK",
         "KDDDDDDDDDDDDDDK",
@@ -520,7 +549,7 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
-// REDESENHA AS FOLHAS DA ÁRVORE (Coluna 6, Linha 0 - Com Transparência)
+// REDESENHA AS FOLHAS DA ÁRVORE (Coluna 6, Linha 0)
 // ============================================================
 (function drawLeaves() {
     if (!ATLAS_CANVAS) return;
@@ -528,13 +557,11 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     ctx.imageSmoothingEnabled = false;
 
     const tileSize = 16;
-    const tileX = 6 * tileSize; // Coluna 6 (Folhas)
-    const tileY = 0 * tileSize; // Linha 0
+    const tileX = 6 * tileSize;
+    const tileY = 0 * tileSize;
 
-    // Limpa a área completamente para os buracos ficarem transparentes
     ctx.clearRect(tileX, tileY, tileSize, tileSize);
 
-    // Matriz 16x16 com '.' representando buracos transparentes
     const pixels = [
         "34.12.43.2.34.12",
         ".123..24.31..23.",
@@ -555,10 +582,10 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     ];
 
     const palette = {
-        '1': '#193b0b', // Verde sombra profunda
-        '2': '#245210', // Verde escuro
-        '3': '#306e15', // Verde médio (Base)
-        '4': '#3a8519'  // Verde iluminado
+        '1': '#193b0b',
+        '2': '#245210',
+        '3': '#306e15',
+        '4': '#3a8519'
     };
 
     for (let r = 0; r < 16; r++) {

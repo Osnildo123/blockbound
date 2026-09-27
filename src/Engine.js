@@ -1490,10 +1490,14 @@ export class MinecraftEngine {
     getHighestBlockY(x, z) {
         const wx = Math.floor(x);
         const wz = Math.floor(z);
-        for (let y = 38; y >= 0; y--) {
+
+        // Procura a partir de Y = 45 (suficiente para o topo das árvores e colinas) até Y = -48
+        for (let y = 45; y >= -48; y--) {
             const b = this.getBlock(wx, y, wz);
             if (b !== BLOCKS.AIR && b !== BLOCKS.WATER && !BLOCK_TILES[b]?.plant) return y;
         }
+
+        // Fallback baseado no ruído se o chunk ainda não estiver populado
         const elevNoise = this.noise.noise2D(wx * 0.015, wz * 0.015) * 12 +
                           this.noise.noise2D(wx * 0.04, wz * 0.04) * 4;
         return Math.floor(14 + elevNoise);
@@ -2411,7 +2415,8 @@ export class MinecraftEngine {
         this.populatedChunks.add(chunkKey);
 
         const size = this.chunkSize;
-        const SEA_LEVEL = 11; // Nível fixo do lago
+        const SEA_LEVEL = 11;
+        const MIN_Y = -48; // Profundidade otimizada para manter 60+ FPS
 
         for (let x = 0; x < size; x++) {
             for (let z = 0; z < size; z++) {
@@ -2425,17 +2430,12 @@ export class MinecraftEngine {
                 const isDesertBiome = (tempNoise > 0.35);
                 const isForestBiome = (!isSnowBiome && !isDesertBiome && humidityNoise > 0.15);
 
-                // --- RELEVO CONTINENTAL (PREDOMINÂNCIA DE TERRA FIRME) ---
                 const elevNoise = this.noise.noise2D(wx * 0.012, wz * 0.012) * 8 +
                                   this.noise.noise2D(wx * 0.03, wz * 0.03) * 3;
 
-                // Força o terreno base a ficar SEMPRE acima do nível do mar (mínimo Y = 13)
                 let baseLandHeight = Math.max(13, Math.floor(16 + elevNoise));
 
-                // --- BACIAS DE LAGOS RAROS E PONTUAIS ---
                 const lakeNoise = this.noise.noise2D(wx * 0.009 + 250, wz * 0.009 + 250);
-                
-                // Apenas bacias profundas (ruído < -0.48) esculpem um lago no solo
                 if (lakeNoise < -0.48) {
                     const depth = (lakeNoise + 0.48) * 16; 
                     baseLandHeight = Math.max(3, Math.floor(baseLandHeight + depth));
@@ -2443,93 +2443,100 @@ export class MinecraftEngine {
 
                 const h = baseLandHeight;
 
-                // Bedrock na base
-                this.worldData.set(`${wx},0,${wz}`, BLOCKS.BEDROCK);
+                // Bedrock apenas na base inferior do mapa
+                this.worldData.set(`${wx},${MIN_Y},${wz}`, BLOCKS.BEDROCK);
 
                 const maxGenY = Math.max(h, SEA_LEVEL);
 
-                for (let y = 1; y <= maxGenY; y++) {
+                for (let y = MIN_Y + 1; y <= maxGenY; y++) {
                     const blockKey = `${wx},${y},${wz}`;
-                    if (!this.worldData.has(blockKey)) {
+                    if (this.worldData.has(blockKey)) continue;
 
-                        // ============================================================
-                        // 1. CAVERNAS SUBTERRÂNEAS (100% SECAS)
-                        // ============================================================
-                        const caveRegion = this.noise.noise2D(wx * 0.008, wz * 0.008);
-                        const hasCaveNetwork = (caveRegion > 0.32);
+                    // ============================================================
+                    // 1. MEGACAVERNAS E TÚNEIS COM LAGOS DE LAVA NO FUNDO
+                    // ============================================================
+                    let isCave = false;
 
-                        if (hasCaveNetwork && y > 1 && y <= 28) {
+                    if (y < h - 4) {
+                        // Ruído 3D para salões gigantes abaixo do solo
+                        const megaCaveNoise = this.noise.noise3D 
+                            ? this.noise.noise3D(wx * 0.018, y * 0.022, wz * 0.018) 
+                            : this.noise.noise2D(wx * 0.018 + y * 0.02, wz * 0.018);
+
+                        if (megaCaveNoise > 0.35) {
+                            isCave = true;
+                        } else {
+                            // Túneis normais
                             const scale = 0.038;
+                            const caveRegion = this.noise.noise2D(wx * 0.008, wz * 0.008);
+                            
+                            if (caveRegion > 0.32 && y <= 28) {
+                                const n1 = this.noise.noise3D 
+                                    ? this.noise.noise3D(wx * scale, y * (scale * 1.3), wz * scale) 
+                                    : this.noise.noise2D(wx * scale + y * 0.05, wz * scale + y * 0.05);
 
-                            const n1 = this.noise.noise3D 
-                                ? this.noise.noise3D(wx * scale, y * (scale * 1.3), wz * scale) 
-                                : this.noise.noise2D(wx * scale + y * 0.05, wz * scale + y * 0.05);
+                                const n2 = this.noise.noise3D 
+                                    ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.3), (wz + 265.35) * scale) 
+                                    : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
 
-                            const n2 = this.noise.noise3D 
-                                ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.3), (wz + 265.35) * scale) 
-                                : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
-
-                            const tunnelDensity = Math.abs(n1) + Math.abs(n2);
-                            const isSpaghettiCave = tunnelDensity < 0.072;
-
-                            const cheeseNoise = this.noise.noise3D 
-                                ? this.noise.noise3D(wx * 0.025, y * 0.03, wz * 0.025) 
-                                : this.noise.noise2D(wx * 0.025 + y * 0.03, wz * 0.025);
-
-                            const isCheeseCave = (y > 2 && y < 12 && cheeseNoise > 0.55);
-                            const isCaveEntrance = (tunnelDensity < 0.025 && y <= 20);
-
-                            if ((y < h - 5 || isCaveEntrance) && (isSpaghettiCave || isCheeseCave)) {
-                                this.worldData.set(blockKey, BLOCKS.AIR);
-                                continue;
-                            }
-                        }
-
-                        // ============================================================
-                        // 2. TERRENO SÓLIDO OU ÁGUA
-                        // ============================================================
-                        if (y <= h) {
-                            let type = BLOCKS.STONE;
-
-                            if (y === h) {
-                                if (isSnowBiome) type = (h < SEA_LEVEL) ? BLOCKS.ICE : BLOCKS.SNOW;
-                                else if (isDesertBiome) type = BLOCKS.SAND;
-                                else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.GRASS;
-                            } else if (y > h - 3) {
-                                if (isDesertBiome) type = BLOCKS.SAND;
-                                else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.DIRT;
-                            }
-
-                            // Veios de Minérios
-                            if (type === BLOCKS.STONE && y > 1 && y < h - 2) {
-                                const oreSeed = this.getSeededRandom(wx, y, wz);
-                                const veinCluster = this.noise.noise2D(wx * 0.12, y * 0.12 + wz * 0.12);
-
-                                if (veinCluster > 0.38) {
-                                    if (y <= 8 && oreSeed < 0.20) type = BLOCKS.ELEMENTAL_CORE;
-                                    else if (y <= 12 && oreSeed < 0.35) type = BLOCKS.DIAMOND_ORE;
-                                    else if (y <= 18 && oreSeed < 0.50) type = BLOCKS.GOLD_ORE;
-                                    else if (y <= 28 && oreSeed < 0.70) type = BLOCKS.IRON_ORE;
-                                    else if (y <= 34) type = BLOCKS.COAL_ORE;
+                                if (Math.abs(n1) + Math.abs(n2) < 0.075) {
+                                    isCave = true;
                                 }
                             }
-
-                            this.worldData.set(blockKey, type);
-                        } 
-                        else if (y <= SEA_LEVEL) {
-                            // ÁGUA: Apenas preenche o oco dentro da bacia do lago
-                            this.worldData.set(blockKey, isSnowBiome ? BLOCKS.ICE : BLOCKS.WATER);
                         }
+                    }
+
+                    if (isCave) {
+                        // Se estiver na base da caverna profunda (Y <= -38), preenche com LAVA!
+                        if (y <= -38) {
+                            this.worldData.set(blockKey, BLOCKS.LAVA);
+                        } else {
+                            this.worldData.set(blockKey, BLOCKS.AIR);
+                        }
+                        continue;
+                    }
+
+                    // ============================================================
+                    // 2. TERRENO SÓLIDO E MINÉRIOS PROFUNDOS
+                    // ============================================================
+                    if (y <= h) {
+                        let type = BLOCKS.STONE;
+
+                        if (y === h) {
+                            if (isSnowBiome) type = (h < SEA_LEVEL) ? BLOCKS.ICE : BLOCKS.SNOW;
+                            else if (isDesertBiome) type = BLOCKS.SAND;
+                            else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.GRASS;
+                        } else if (y > h - 3) {
+                            if (isDesertBiome) type = BLOCKS.SAND;
+                            else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.DIRT;
+                        }
+
+                        // Veios de Minérios Ricos nas Profundezas
+                        if (type === BLOCKS.STONE && y < h - 2) {
+                            const oreSeed = this.getSeededRandom(wx, y, wz);
+                            const veinCluster = this.noise.noise2D(wx * 0.10, y * 0.10 + wz * 0.10);
+
+                            if (veinCluster > 0.35) {
+                                if (y <= -25 && oreSeed < 0.25) type = BLOCKS.ELEMENTAL_CORE;
+                                else if (y <= -10 && oreSeed < 0.35) type = BLOCKS.DIAMOND_ORE;
+                                else if (y <= 5 && oreSeed < 0.50) type = BLOCKS.GOLD_ORE;
+                                else if (y <= 20 && oreSeed < 0.70) type = BLOCKS.IRON_ORE;
+                                else if (y <= 34) type = BLOCKS.COAL_ORE;
+                            }
+                        }
+
+                        this.worldData.set(blockKey, type);
+                    } 
+                    else if (y <= SEA_LEVEL) {
+                        this.worldData.set(blockKey, isSnowBiome ? BLOCKS.ICE : BLOCKS.WATER);
                     }
                 }
 
                 // ============================================================
-                // 3. VEGETAÇÃO NA TERRA SECAM
+                // 3. VEGETAÇÃO
                 // ============================================================
                 const distToSpawn = Math.sqrt(wx * wx + wz * wz);
-                const allowGen = distToSpawn > 5.5;
-
-                if (h >= SEA_LEVEL && allowGen && !this.worldData.has(`${wx},${h+1},${wz}`)) {
+                if (h >= SEA_LEVEL && distToSpawn > 5.5 && !this.worldData.has(`${wx},${h+1},${wz}`)) {
                     if (isDesertBiome) {
                         if (this.getSeededRandom(wx, h, wz) < 0.02) {
                             for (let ch = 1; ch <= 3; ch++) this.worldData.set(`${wx},${h+ch},${wz}`, BLOCKS.CACTUS);
@@ -2539,10 +2546,7 @@ export class MinecraftEngine {
                         const treeChance = isForestBiome ? 0.08 : 0.018;
 
                         if (rand < treeChance) {
-                            
-                            // --> GERA A ÁRVORE CLASSICA AQUI! <--
                             this.generateTree(wx, h + 1, wz);
-
                         } else if (rand < 0.12) {
                             this.worldData.set(`${wx},${h+1},${wz}`, BLOCKS.TALL_GRASS);
                         } else if (rand < 0.16) {
@@ -2550,22 +2554,6 @@ export class MinecraftEngine {
                         }
                     }
                 }
-            }
-        }
-
-        // ============================================================
-        // 4. SPAWN DE RUÍNAS METÁLICAS
-        // ============================================================
-        const ruinChance = this.getSeededRandom(cx * 43.12, 888, cz * 91.23);
-        const distFromSpawnChunk = Math.sqrt(cx * cx + cz * cz);
-
-        if (ruinChance < 0.006 && distFromSpawnChunk > 6.0) {
-            const rx = cx * size + 8;
-            const rz = cz * size + 8;
-            const ry = this.getHighestBlockY(rx, rz);
-
-            if (ry > SEA_LEVEL + 1) {
-                this.generateRuinStructure(rx, ry, rz);
             }
         }
     }
@@ -2602,7 +2590,8 @@ export class MinecraftEngine {
                 const wx = cx * size + x;
                 const wz = cz * size + z;
 
-                for (let y = 0; y <= 38; y++) {
+                    // Substitui a linha do loop de Y por esta:
+                    for (let y = -48; y <= 40; y++) {
                     const type = this.getBlock(wx, y, wz);
                     if (type === BLOCKS.AIR || type === BLOCKS.DOOR) continue;
 
@@ -3647,12 +3636,6 @@ export class MinecraftEngine {
             this.findSafeSpawn();
             this.velocity.set(0, 0, 0);
             return;
-        }
-
-        if (this.position.y < 1.62) {
-            this.position.y = 1.62;
-            this.velocity.y = 0;
-            this.isGrounded = true;
         }
 
         this.autoSaveTimer -= delta;
