@@ -2195,6 +2195,12 @@ export class MinecraftEngine {
             this.network.sendChestUpdate(this.activeChestKey, this.chestData.get(this.activeChestKey));
         }
 
+        if (this.activeFurnaceKey && (listType === 'furnace' || this.draggedSlot?.type === 'furnace')) {
+            if (this.network && typeof this.network.sendFurnaceUpdate === 'function') {
+                this.network.sendFurnaceUpdate(this.activeFurnaceKey, this.furnaceData.get(this.activeFurnaceKey));
+            }
+        }
+
         this.updateUI();
         if (this.activeChestKey) this.updateChestUI();
         if (this.activeFurnaceKey) this.updateFurnaceUI();
@@ -2859,6 +2865,19 @@ export class MinecraftEngine {
                 this.doorMeshes.delete(key);
             }
             this.createDoorMesh(x, y, z, rotY, false);
+        }
+    }
+
+    // Sincroniza o estado da fornalha recebido via rede (Host/Cliente)
+    applyRemoteFurnaceUpdate(furnaceKey, furnaceState) {
+        if (!this.furnaceData) this.furnaceData = new Map();
+        
+        // Atualiza os slots e o tempo de queima com os dados remotos
+        this.furnaceData.set(furnaceKey, furnaceState);
+
+        // Se o jogador estiver com a janela desta fornalha aberta, atualiza a interface gráfica
+        if (this.activeFurnaceKey === furnaceKey) {
+            this.updateFurnaceUI();
         }
     }
 

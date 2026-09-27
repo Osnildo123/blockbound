@@ -283,6 +283,12 @@ export class NetworkManager {
             this.game.seasonIndex = data.seasonIndex;
             this.game.currentWeather = data.currentWeather;
         }
+
+        else if (data.type === 'FURNACE_UPDATE') {
+            if (typeof this.game.applyRemoteFurnaceUpdate === 'function') {
+                this.game.applyRemoteFurnaceUpdate(data.furnaceKey, data.furnaceData);
+            }
+        }
     }
 
     sendCreeperExplode(x, y, z) {
@@ -364,6 +370,12 @@ export class NetworkManager {
     sendWorldSync(dayTime, seasonIndex, currentWeather) {
         if (this.netConn && this.netConn.open) {
             this.netConn.send({ type: 'WORLD_SYNC', dayTime, seasonIndex, currentWeather });
+        }
+    }
+
+    sendFurnaceUpdate(furnaceKey, furnaceData) {
+        if (this.netConn && this.netConn.open) {
+            this.netConn.send({ type: 'FURNACE_UPDATE', furnaceKey, furnaceData });
         }
     }
 
