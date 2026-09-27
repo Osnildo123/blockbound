@@ -42,6 +42,72 @@ import { AppState, renderStartScreen } from './main.js';
 import { DroppedItem } from './entities/DroppedItem.js';
 
 export class MinecraftEngine {
+
+    generateRuinStructure(rx, ry, rz) {
+
+        // Itens Raros dentro do Baú das Ruínas
+        if (!this.chestData.has(chestKey)) {
+            const loot = Array(27).fill(null);
+            loot[0] = { id: BLOCKS.IRON_INGOT, count: 3 + Math.floor(Math.random() * 5) };
+            loot[1] = { id: BLOCKS.ELEMENTAL_CORE, count: 1 };
+            loot[2] = { id: BLOCKS.BUCKET, count: 1 }; // <-- BALDE ADICIONADO AQUI!
+            if (Math.random() < 0.5) loot[3] = { id: BLOCKS.SWORD, count: 1 };
+            this.chestData.set(chestKey, loot);
+        }
+
+
+        // Padrão de Ruína Metálica Pós-Apocalíptica (Bunker/Torre Caída 5x5)
+        const ruinWidth = 5;
+        const ruinHeight = 4;
+
+        for (let x = -2; x <= 2; x++) {
+            for (let z = -2; z <= 2; z++) {
+                const wx = rx + x;
+                const wz = rz + z;
+
+                // Fundação e Chão de Pedra/Ferro
+                this.worldData.set(`${wx},${ry},${wz}`, (Math.random() < 0.4) ? BLOCKS.IRON_ORE : BLOCKS.COBBLE);
+
+                // Paredes em Ruínas com Aberturas
+                for (let h = 1; h <= ruinHeight; h++) {
+                    const blockKey = `${wx},${ry + h},${wz}`;
+                    
+                    // Paredes externas (com falhas procedurais)
+                    if (Math.abs(x) === 2 || Math.abs(z) === 2) {
+                        const wallNoise = this.getSeededRandom(wx, ry + h, wz);
+                        if (wallNoise > 0.35) {
+                            const mat = (wallNoise > 0.75) ? BLOCKS.IRON_ORE : ((wallNoise > 0.5) ? BLOCKS.BEDROCK : BLOCKS.COBBLE);
+                            this.worldData.set(blockKey, mat);
+                        } else {
+                            this.worldData.set(blockKey, BLOCKS.AIR);
+                        }
+                    } else {
+                        // Interior Oco
+                        this.worldData.set(blockKey, BLOCKS.AIR);
+                    }
+                }
+            }
+        }
+
+        // Adiciona um Baú de Espólio no Centro da Ruína
+        const chestKey = `${rx},${ry + 1},${rz}`;
+        this.worldData.set(chestKey, BLOCKS.CHEST);
+        
+        // Itens Raros dentro do Baú das Ruínas
+        if (!this.chestData.has(chestKey)) {
+            const loot = Array(27).fill(null);
+            loot[0] = { id: BLOCKS.IRON_INGOT, count: 3 + Math.floor(Math.random() * 5) };
+            loot[1] = { id: BLOCKS.ELEMENTAL_CORE, count: 1 };
+            if (Math.random() < 0.5) loot[2] = { id: BLOCKS.SWORD, count: 1 };
+            if (Math.random() < 0.4) loot[3] = { id: BLOCKS.GOLD_ORE, count: 4 };
+            this.chestData.set(chestKey, loot);
+        }
+
+        // Iluminação Futurista Ruída (Totem no canto)
+        this.worldData.set(`${rx - 1},${ry + 1},${rz - 1}`, BLOCKS.TOTEM);
+        this.applyBlockLight(rx - 1, ry + 1, rz - 1, BLOCKS.TOTEM);
+    }
+
     updateFurnaces(delta) {
         if (!this.furnaceData) return;
         if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
@@ -133,7 +199,7 @@ export class MinecraftEngine {
 
     triggerExplosionEffects(x, y, z) {
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const ctx = new (window.AudioContext || window.AudioContext)();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.type = 'sawtooth';
@@ -776,13 +842,30 @@ export class MinecraftEngine {
         };
 
         const types = ['clown', 'salmon', 'blue', 'cod', 'pufferfish', 'turtle'];
-        
-        for (let i = 0; i < 24; i++) {
-            const rx = (random() - 0.5) * 60;
-            const rz = (random() - 0.5) * 60;
-            const ry = 8 + random() * 2;
+        const waterSpots = [];
+
+        // Procura por posições reais com água num raio expandido do mapa
+        for (let attempt = 0; attempt < 600; attempt++) {
+            const rx = Math.floor((random() - 0.5) * 240);
+            const rz = Math.floor((random() - 0.5) * 240);
+
+            // Verifica o nível d'água (Y entre 5 e 10)
+            for (let ry = 5; ry <= 10; ry++) {
+                if (this.getBlock(rx, ry, rz) === BLOCKS.WATER) {
+                    waterSpots.push({ x: rx + 0.5, y: ry + 0.5, z: rz + 0.5 });
+                    break;
+                }
+            }
+
+            // Para assim que encontrar 30 posições válidas em lagos
+            if (waterSpots.length >= 30) break;
+        }
+
+        // Spawna os peixes e tartarugas diretamente dentro da água dos lagos encontrados
+        for (let i = 0; i < waterSpots.length; i++) {
+            const pos = waterSpots[i];
             const type = types[Math.floor(random() * types.length)];
-            this.fishes.push(new VoxelFish(type, rx, ry, rz, this.scene));
+            this.fishes.push(new VoxelFish(type, pos.x, pos.y, pos.z, this.scene));
         }
     }
 
@@ -901,7 +984,7 @@ export class MinecraftEngine {
             const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                              document.getElementById('chest-screen').style.display === 'flex' || 
                              document.getElementById('crafting-table-screen').style.display === 'flex' || 
-                             (furnaceEl && furnaceEl.style.display === 'flex') || // <--- ADICIONADO AQUI
+                             (furnaceEl && furnaceEl.style.display === 'flex') ||
                              document.getElementById('start-screen').style.display !== 'none' ||
                              document.getElementById('pause-menu').style.display === 'flex' ||
                              (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
@@ -1402,6 +1485,19 @@ export class MinecraftEngine {
                 return;
             }
 
+            // Permite fechar a Fornalha, Baú, Bancada ou Inventário pressionando ESC
+            if (e.code === 'Escape') {
+                const furnaceEl = document.getElementById('furnace-screen');
+                const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
+                                 document.getElementById('chest-screen').style.display === 'flex' || 
+                                 document.getElementById('crafting-table-screen').style.display === 'flex' || 
+                                 (furnaceEl && furnaceEl.style.display === 'flex');
+                if (isGuiOpen) {
+                    this.toggleInventory();
+                    return;
+                }
+            }
+
             if (e.code === 'KeyT') {
                 e.preventDefault();
                 this.openChat();
@@ -1685,6 +1781,12 @@ export class MinecraftEngine {
         }
 
         this.craft3x3Result = null;
+
+        // RECEITA: 3 Barras de Ferro -> 1 Balde
+        if (items.length === 3 && ids.every(id => id === BLOCKS.IRON_INGOT)) {
+            this.craft3x3Result = { id: BLOCKS.BUCKET, count: 1 };
+            return;
+        }
     }
 
     takeCraft3x3Result() {
@@ -2092,7 +2194,7 @@ export class MinecraftEngine {
         this.populatedChunks.add(chunkKey);
 
         const size = this.chunkSize;
-        const WATER_LEVEL = 11;
+        const SEA_LEVEL = 11; // Nível fixo do lago
 
         for (let x = 0; x < size; x++) {
             for (let z = 0; z < size; z++) {
@@ -2106,54 +2208,111 @@ export class MinecraftEngine {
                 const isDesertBiome = (tempNoise > 0.35);
                 const isForestBiome = (!isSnowBiome && !isDesertBiome && humidityNoise > 0.15);
 
-                const elevNoise = this.noise.noise2D(wx * 0.015, wz * 0.015) * 12 +
-                                  this.noise.noise2D(wx * 0.04, wz * 0.04) * 4;
-                const h = Math.floor(14 + elevNoise);
+                // --- RELEVO CONTINENTAL (PREDOMINÂNCIA DE TERRA FIRME) ---
+                const elevNoise = this.noise.noise2D(wx * 0.012, wz * 0.012) * 8 +
+                                  this.noise.noise2D(wx * 0.03, wz * 0.03) * 3;
 
+                // Força o terreno base a ficar SEMPRE acima do nível do mar (mínimo Y = 13)
+                let baseLandHeight = Math.max(13, Math.floor(16 + elevNoise));
+
+                // --- BACIAS DE LAGOS RAROS E PONTUAIS ---
+                const lakeNoise = this.noise.noise2D(wx * 0.009 + 250, wz * 0.009 + 250);
+                
+                // Apenas bacias profundas (ruído < -0.48) esculpem um lago no solo
+                if (lakeNoise < -0.48) {
+                    const depth = (lakeNoise + 0.48) * 16; 
+                    baseLandHeight = Math.max(3, Math.floor(baseLandHeight + depth));
+                }
+
+                const h = baseLandHeight;
+
+                // Bedrock na base
                 this.worldData.set(`${wx},0,${wz}`, BLOCKS.BEDROCK);
 
-                for (let y = 1; y <= Math.max(h, WATER_LEVEL); y++) {
+                const maxGenY = Math.max(h, SEA_LEVEL);
+
+                for (let y = 1; y <= maxGenY; y++) {
                     const blockKey = `${wx},${y},${wz}`;
                     if (!this.worldData.has(blockKey)) {
-                        let type = BLOCKS.STONE;
 
-                        const caveNoise = this.noise.noise2D(wx * 0.05, y * 0.08 + wz * 0.05) +
-                                          this.noise.noise2D(wx * 0.02, wz * 0.02);
-                        if (y > 2 && y < h - 2 && caveNoise > 0.65) {
-                            type = (y <= WATER_LEVEL) ? BLOCKS.WATER : BLOCKS.AIR;
-                            this.worldData.set(blockKey, type);
-                            continue;
+                        // ============================================================
+                        // 1. CAVERNAS SUBTERRÂNEAS (100% SECAS)
+                        // ============================================================
+                        const caveRegion = this.noise.noise2D(wx * 0.008, wz * 0.008);
+                        const hasCaveNetwork = (caveRegion > 0.32);
+
+                        if (hasCaveNetwork && y > 1 && y <= 28) {
+                            const scale = 0.038;
+
+                            const n1 = this.noise.noise3D 
+                                ? this.noise.noise3D(wx * scale, y * (scale * 1.3), wz * scale) 
+                                : this.noise.noise2D(wx * scale + y * 0.05, wz * scale + y * 0.05);
+
+                            const n2 = this.noise.noise3D 
+                                ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.3), (wz + 265.35) * scale) 
+                                : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
+
+                            const tunnelDensity = Math.abs(n1) + Math.abs(n2);
+                            const isSpaghettiCave = tunnelDensity < 0.072;
+
+                            const cheeseNoise = this.noise.noise3D 
+                                ? this.noise.noise3D(wx * 0.025, y * 0.03, wz * 0.025) 
+                                : this.noise.noise2D(wx * 0.025 + y * 0.03, wz * 0.025);
+
+                            const isCheeseCave = (y > 2 && y < 12 && cheeseNoise > 0.55);
+                            const isCaveEntrance = (tunnelDensity < 0.025 && y <= 20);
+
+                            if ((y < h - 5 || isCaveEntrance) && (isSpaghettiCave || isCheeseCave)) {
+                                this.worldData.set(blockKey, BLOCKS.AIR);
+                                continue;
+                            }
                         }
 
+                        // ============================================================
+                        // 2. TERRENO SÓLIDO OU ÁGUA
+                        // ============================================================
                         if (y <= h) {
+                            let type = BLOCKS.STONE;
+
                             if (y === h) {
-                                if (isSnowBiome) type = h <= WATER_LEVEL ? BLOCKS.ICE : BLOCKS.SNOW;
+                                if (isSnowBiome) type = (h < SEA_LEVEL) ? BLOCKS.ICE : BLOCKS.SNOW;
                                 else if (isDesertBiome) type = BLOCKS.SAND;
-                                else type = h <= WATER_LEVEL ? BLOCKS.SAND : BLOCKS.GRASS;
+                                else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.GRASS;
                             } else if (y > h - 3) {
                                 if (isDesertBiome) type = BLOCKS.SAND;
-                                else type = h <= WATER_LEVEL ? BLOCKS.SAND : BLOCKS.DIRT;
+                                else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.DIRT;
                             }
 
+                            // Veios de Minérios
                             if (type === BLOCKS.STONE && y > 1 && y < h - 2) {
-                                const oreNoise = this.getSeededRandom(wx, y, wz);
-                                if (y <= 12 && oreNoise < 0.015) type = BLOCKS.DIAMOND_ORE;
-                                else if (y <= 18 && oreNoise < 0.03) type = BLOCKS.GOLD_ORE;
-                                else if (y <= 28 && oreNoise < 0.05) type = BLOCKS.IRON_ORE;
-                                else if (y <= 34 && oreNoise < 0.08) type = BLOCKS.COAL_ORE;
+                                const oreSeed = this.getSeededRandom(wx, y, wz);
+                                const veinCluster = this.noise.noise2D(wx * 0.12, y * 0.12 + wz * 0.12);
+
+                                if (veinCluster > 0.38) {
+                                    if (y <= 8 && oreSeed < 0.20) type = BLOCKS.ELEMENTAL_CORE;
+                                    else if (y <= 12 && oreSeed < 0.35) type = BLOCKS.DIAMOND_ORE;
+                                    else if (y <= 18 && oreSeed < 0.50) type = BLOCKS.GOLD_ORE;
+                                    else if (y <= 28 && oreSeed < 0.70) type = BLOCKS.IRON_ORE;
+                                    else if (y <= 34) type = BLOCKS.COAL_ORE;
+                                }
                             }
 
                             this.worldData.set(blockKey, type);
-                        } else if (y <= WATER_LEVEL) {
+                        } 
+                        else if (y <= SEA_LEVEL) {
+                            // ÁGUA: Apenas preenche o oco dentro da bacia do lago
                             this.worldData.set(blockKey, isSnowBiome ? BLOCKS.ICE : BLOCKS.WATER);
                         }
                     }
                 }
 
+                // ============================================================
+                // 3. VEGETAÇÃO NA TERRA SECAM
+                // ============================================================
                 const distToSpawn = Math.sqrt(wx * wx + wz * wz);
                 const allowGen = distToSpawn > 5.5;
 
-                if (h > WATER_LEVEL && allowGen && !this.worldData.has(`${wx},${h+1},${wz}`)) {
+                if (h >= SEA_LEVEL && allowGen && !this.worldData.has(`${wx},${h+1},${wz}`)) {
                     if (isDesertBiome) {
                         if (this.getSeededRandom(wx, h, wz) < 0.02) {
                             for (let ch = 1; ch <= 3; ch++) this.worldData.set(`${wx},${h+ch},${wz}`, BLOCKS.CACTUS);
@@ -2180,6 +2339,22 @@ export class MinecraftEngine {
                         }
                     }
                 }
+            }
+        }
+
+        // ============================================================
+        // 4. SPAWN DE RUÍNAS METÁLICAS
+        // ============================================================
+        const ruinChance = this.getSeededRandom(cx * 43.12, 888, cz * 91.23);
+        const distFromSpawnChunk = Math.sqrt(cx * cx + cz * cz);
+
+        if (ruinChance < 0.006 && distFromSpawnChunk > 6.0) {
+            const rx = cx * size + 8;
+            const rz = cz * size + 8;
+            const ry = this.getHighestBlockY(rx, rz);
+
+            if (ry > SEA_LEVEL + 1) {
+                this.generateRuinStructure(rx, ry, rz);
             }
         }
     }
@@ -2533,21 +2708,35 @@ export class MinecraftEngine {
                 this.removeDoorMesh(bx, by, bz);
             }
 
+            // [NOVO] Se destruir uma Fornalha ou Baú, dropa todos os itens guardados no chão
+            const key = `${bx},${by},${bz}`;
+            if (type === BLOCKS.FURNACE && this.furnaceData.has(key)) {
+                const fData = this.furnaceData.get(key);
+                fData.slots.forEach(slot => {
+                    if (slot && slot.count > 0) {
+                        this.spawnDroppedItem(bx + 0.5, by + 0.5, bz + 0.5, slot.id, slot.count);
+                    }
+                });
+                this.furnaceData.delete(key);
+            }
+
+            if (type === BLOCKS.CHEST && this.chestData.has(key)) {
+                const cSlots = this.chestData.get(key);
+                cSlots.forEach(slot => {
+                    if (slot && slot.count > 0) {
+                        this.spawnDroppedItem(bx + 0.5, by + 0.5, bz + 0.5, slot.id, slot.count);
+                    }
+                });
+                this.chestData.delete(key);
+            }
+
             const pColor = BLOCK_PARTICLE_COLORS[type] || 0x8b5a2b;
             this.particleSystem.createBlockBreakParticles(bx + 0.5, by + 0.5, bz + 0.5, pColor);
 
-            const WATER_LEVEL = 11;
-            const newType = (by <= WATER_LEVEL) ? BLOCKS.WATER : BLOCKS.AIR;
-            this.setBlockModified(bx, by, bz, newType);
-
+            this.setBlockModified(bx, by, bz, BLOCKS.AIR);
             this.sound.playBreak();
 
-            // Se minerar Pedra (STONE), o item gerado no chão passa a ser Pedregulho (COBBLE)
-            let dropType = type;
-            if (type === BLOCKS.STONE) {
-                dropType = BLOCKS.COBBLE;
-            }
-
+            let dropType = (type === BLOCKS.STONE) ? BLOCKS.COBBLE : type;
             this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, dropType, 1);
             this.notify(`Coletou: ${BLOCK_TILES[dropType]?.name || 'Item'}`);
 
@@ -2657,9 +2846,61 @@ export class MinecraftEngine {
             this.hunger = Math.min(100, this.hunger + info.healHunger);
             if (info.healHP) this.hp = Math.min(100, this.hp + info.healHP);
             item.count--;
+            if (item.count <= 0) this.hotbarSlots[this.selectedSlot] = null;
             if (this.sound) this.sound.playEat();
             this.updateUI();
             this.notify(`Comeu ${info.name}! Fome: ${Math.round(this.hunger)}%`);
+            return;
+        }
+
+        // ============================================================
+        // SISTEMA DE BALDE: RECOLHER E DESPEJAR ÁGUA
+        // ============================================================
+        
+        // A) RECOLHER ÁGUA COM BALDE VAZIO
+        if (item && item.id === BLOCKS.BUCKET && target && target.breakPos) {
+            const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
+            const targetType = this.getBlock(bx, by, bz);
+
+            if (targetType === BLOCKS.WATER) {
+                // Remove o bloco de água do mapa
+                this.setBlockModified(bx, by, bz, BLOCKS.AIR);
+                this.rebuildChunkAtBlock(bx, by, bz);
+
+                // Transforma 1 balde vazio em Balde com Água
+                item.count--;
+                if (item.count <= 0) {
+                    this.hotbarSlots[this.selectedSlot] = { id: BLOCKS.WATER_BUCKET, count: 1 };
+                } else {
+                    this.addToInventory(BLOCKS.WATER_BUCKET, 1);
+                }
+
+                if (this.sound) this.sound.playPlace();
+                this.notify("🪣 Recolheu Água para o Balde!");
+                this.updateUI();
+                return;
+            }
+        }
+
+        // B) DESPEJAR ÁGUA COM BALDE CHEIO (OU COM O PRÓPRIO BLOCO DE ÁGUA)
+        if (item && (item.id === BLOCKS.WATER_BUCKET || item.id === BLOCKS.WATER) && target && target.placePos) {
+            const px = target.placePos.x, py = target.placePos.y, pz = target.placePos.z;
+
+            // Coloca o bloco de água no mapa
+            this.setBlockModified(px, py, pz, BLOCKS.WATER);
+            this.rebuildChunkAtBlock(px, py, pz);
+
+            if (item.id === BLOCKS.WATER_BUCKET) {
+                // Devolve o balde vazio para a mão
+                this.hotbarSlots[this.selectedSlot] = { id: BLOCKS.BUCKET, count: 1 };
+            } else {
+                item.count--;
+                if (item.count <= 0) this.hotbarSlots[this.selectedSlot] = null;
+            }
+
+            if (this.sound) this.sound.playPlace();
+            this.notify("💧 Colocou Água no mapa!");
+            this.updateUI();
             return;
         }
 
@@ -2678,7 +2919,7 @@ export class MinecraftEngine {
             return;
         }
 
-        // 3. Interação com Blocos Funcionais
+        // 3. Interação com Blocos Funcionais (Fornalha, Baú, Fogueira, etc.)
         if (target && target.breakPos) {
             const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
             const targetType = this.getBlock(bx, by, bz);
@@ -2703,7 +2944,6 @@ export class MinecraftEngine {
                 return;
             }
 
-            // Fornalha (Usa apenas a constante BLOCKS.FURNACE)
             if (targetType === BLOCKS.FURNACE) {
                 this.openFurnaceGUI(doorKey);
                 return;
@@ -2711,6 +2951,7 @@ export class MinecraftEngine {
 
             if (targetType === BLOCKS.CAMPFIRE && item && item.id === BLOCKS.RAW_MEAT) {
                 item.count--;
+                if (item.count <= 0) this.hotbarSlots[this.selectedSlot] = null;
                 this.addToInventory(BLOCKS.COOKED_MEAT, 1);
                 if (this.sound) this.sound.playPlace();
                 this.updateUI();
@@ -2719,7 +2960,7 @@ export class MinecraftEngine {
             }
         }
 
-        // 4. Colocar o Bloco no Mundo
+        // 4. Colocar o Bloco normal no Mundo
         this.placeBlock();
     }
 
@@ -2903,8 +3144,10 @@ export class MinecraftEngine {
         const target = this.getTargetBlock();
         if (target && target.breakPos) {
             const type = this.getBlock(target.breakPos.x, target.breakPos.y, target.breakPos.z);
-            if (type !== BLOCKS.AIR && type !== BLOCKS.WATER) {
-                this.hotbarSlots[this.selectedSlot] = { id: type, count: 64 };
+            if (type !== BLOCKS.AIR) {
+                // Se focar na água, dá um Balde de Água ou o bloco de Água
+                const pickedId = (type === BLOCKS.WATER) ? BLOCKS.WATER_BUCKET : type;
+                this.hotbarSlots[this.selectedSlot] = { id: pickedId, count: 64 };
                 this.updateUI();
             }
         }
@@ -2998,7 +3241,12 @@ export class MinecraftEngine {
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
 
         if (!isClientLAN) {
-            this.dayTime += delta * 0.0015;
+            // REDUZA ESTE VALOR PARA O TEMPO PASSAR MAIS DEVAGAR:
+            // 0.0015 = ~11 minutos por dia (Atual)
+            // 0.0008 = ~21 minutos por dia (Padrão do Minecraft clássico)
+            // 0.0005 = ~33 minutos por dia
+            this.dayTime += delta * 0.0008; 
+
             if (this.dayTime > 1.0) {
                 this.dayTime -= 1.0;
                 this.weatherTimer++;
@@ -3006,6 +3254,8 @@ export class MinecraftEngine {
                     this.seasonIndex = (this.seasonIndex + 1) % 4;
                 }
             }
+
+            // ... (resto do código do método updateDayNight)
 
             const season = this.seasons[this.seasonIndex];
             if (season === 'Inverno') {

@@ -1,6 +1,12 @@
 import { TextureAtlasGenerator } from '../world/TextureAtlas.js';
 
 export const BLOCKS = {
+    FLINT_STEEL: 35,
+    CRAFTING_TABLE: 51,
+    FURNACE: 52,
+    IRON_INGOT: 53,
+    BUCKET: 54,        // <-- Balde Vazio
+    WATER_BUCKET: 55,  // <-- Balde com Água
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, PLANK: 7,
     RED_FLOWER: 8, YELLOW_FLOWER: 9, TALL_GRASS: 10, MUSHROOM: 11, BEDROCK: 12, COBBLE: 13,
     TORCH: 14, CAMPFIRE: 15, RAW_MEAT: 16, COOKED_MEAT: 17, WATER: 18,
@@ -87,7 +93,13 @@ export const BLOCK_TILES = {
         front: [5, 4],    // <-- NOVA POSIÇÃO LIVRE
         isFurnace: true 
     },
-    53: { name: 'Barra de Ferro', top: [5,2], plant: true }
+
+    53: { name: 'Barra de Ferro', top: [5,2], plant: true },
+    
+// Adicionar no final do BLOCK_TILES:
+    54: { name: 'Balde', top: [4, 4], plant: true, isTool: true },
+    55: { name: 'Balde com Água', top: [3, 2], plant: true, isTool: true }
+
 };
 
 export const BLOCK_PARTICLE_COLORS = {
