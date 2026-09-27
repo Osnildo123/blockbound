@@ -2837,11 +2837,18 @@ export class MinecraftEngine {
         return null;
     }
 
+    // ============================================================
+    // OTIMIZAÇÃO DE BLOCOS RECEBIDOS PELA REDE (CLIENTE LAN)
+    // ============================================================
+
     applyRemoteBlock(x, y, z, blockType, rotY = null) {
         this.setBlockModified(x, y, z, blockType, rotY, true);
-        
-        this.rebuildChunkAtBlock(x, y, z);
-        
+
+        // Em vez de reconstruir o chunk imediatamente para cada pacote de rede,
+        // marca o chunk na fila para reconstruir uma única vez no final do frame
+        if (!this.pendingRemoteChunks) this.pendingRemoteChunks = new Set();
+        this.markChunkForRebuild(x, z, this.pendingRemoteChunks);
+
         const isDoor = (blockType === 8 || (typeof BLOCKS !== 'undefined' && blockType === BLOCKS.DOOR));
         if (isDoor && rotY !== null && rotY !== undefined) {
             const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
@@ -2853,6 +2860,16 @@ export class MinecraftEngine {
             }
             this.createDoorMesh(x, y, z, rotY, false);
         }
+    }
+
+    processPendingRemoteRebuilds() {
+        if (!this.pendingRemoteChunks || this.pendingRemoteChunks.size === 0) return;
+
+        for (let key of this.pendingRemoteChunks) {
+            const [rcx, rcz] = key.split(',').map(Number);
+            this.rebuildSingleChunk(rcx, rcz);
+        }
+        this.pendingRemoteChunks.clear();
     }
 
     executeBlockBreak(target) {
@@ -3806,7 +3823,8 @@ export class MinecraftEngine {
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
-            this.updateWaterFlow(delta); // Processa a água com o algoritmo otimizado
+            this.updateWaterFlow(delta);
+            this.processPendingRemoteRebuilds(); // <-- ATUALIZA OS CHUNKS DO CLIENTE DE FORMA AGRUPADA
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
