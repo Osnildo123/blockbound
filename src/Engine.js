@@ -1201,6 +1201,38 @@ export class MinecraftEngine {
             vertexColors: true
         });
 
+        // ==========================================================
+        // SHADER: EFEITO DE CACHOEIRA (ÁGUA A DESCER)
+        // ==========================================================
+        this.waterMaterial.onBeforeCompile = (shader) => {
+            shader.uniforms.uTime = { value: 0 };
+            this.waterShader = shader;
+
+            shader.fragmentShader = `
+                uniform float uTime;
+            ` + shader.fragmentShader;
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <map_fragment>',
+                `
+                #ifdef USE_MAP
+                    vec2 waterUv = vUv;
+                    
+                    float tileY = floor(waterUv.y * 8.0);
+                    float localV = fract(waterUv.y * 8.0);
+                    
+                    // SINAL DE SOMA (+) FAZ A ÁGUA DESCER:
+                    localV = fract(localV + (uTime * 1.5));
+                    
+                    waterUv.y = (tileY + localV) / 8.0;
+
+                    vec4 sampledDiffuseColor = texture2D( map, waterUv );
+                    diffuseColor *= sampledDiffuseColor;
+                #endif
+                `
+            );
+        };
+
         const boxGeo = new THREE.BoxGeometry(1.002, 1.002, 1.002);
         const edgesGeo = new THREE.EdgesGeometry(boxGeo);
         const outlineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
@@ -2483,7 +2515,7 @@ export class MinecraftEngine {
                     if (type === BLOCKS.AIR || type === BLOCKS.DOOR) continue;
 
                     const bInfo = BLOCK_TILES[type];
-                    const isWater = (type === BLOCKS.WATER || type === BLOCKS.ICE);
+                    const isWater = (type === BLOCKS.WATER);
 
                     if (bInfo.plant) {
                         const tileCoord = bInfo.top;
@@ -3715,7 +3747,15 @@ export class MinecraftEngine {
         const delta = Math.min((timestamp - (this.lastTime || timestamp)) / 1000, 0.1);
         this.lastTime = timestamp;
 
+        // --- ATUALIZA A ANIMAÇÃO DA ÁGUA NA PLACA DE VÍDEO ---
+        this.waterTime = (this.waterTime || 0) + delta;
+        if (this.waterShader) {
+            this.waterShader.uniforms.uTime.value = this.waterTime;
+        }
+
         const isLAN = this.network && (this.network.isHost || (this.network.netConn && this.network.netConn.open));
+        
+        // DECLARAR isClientLAN AQUI NO TOPO DO ANIMATE PARA ESTAR DISPONÍVEL EM TODO O MÉTODO:
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
 
         if (!isLAN && (this.isPaused || document.getElementById('pause-menu').style.display === 'flex')) {
@@ -3731,7 +3771,7 @@ export class MinecraftEngine {
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
-            this.updateWaterFlow(delta); // <-- ATIVA A FÍSICA DE FLUIDOS EM TEMPO REAL
+            this.updateWaterFlow(delta);
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
@@ -3744,6 +3784,7 @@ export class MinecraftEngine {
 
             this.spawnNightMobs(delta);
 
+            // AGORA isClientLAN FUNCIONA PERFEITAMENTE AQUI DENTRO SEM ERROS:
             this.mobs.forEach(mob => {
                 if (isClientLAN) {
                     if (mob.targetPos) {
@@ -3799,6 +3840,7 @@ export class MinecraftEngine {
                 door.group.rotation.y = THREE.MathUtils.lerp(door.group.rotation.y, door.targetRot, 0.2);
             }
 
+            // ATUALIZAÇÃO DAS FLECHAS (AGORA A EXECUÇÃO CHEGA AQUI!):
             if (this.arrows && this.arrows.length > 0) {
                 for (let i = this.arrows.length - 1; i >= 0; i--) {
                     const arrow = this.arrows[i];
