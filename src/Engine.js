@@ -2360,6 +2360,50 @@ export class MinecraftEngine {
         return 0.30;
     }
 
+    // ============================================================
+    // GERAÇÃO DA ÁRVORE CLÁSSICA (OAK CLASSIC)
+    // ============================================================
+    generateTree(wx, y, wz) {
+        const height = 4 + Math.floor(this.getSeededRandom(wx, y, wz) * 2); // Tronco de 4 a 5 blocos
+
+        // 1. GERAR A COPA (FOLHAS) - Da base da copa até ao topo
+        for (let dy = -3; dy <= 0; dy++) {
+            const currentY = y + height + dy;
+            
+            // Raio: 2 blocos para as duas camadas inferiores, 1 bloco para as duas superiores
+            const radius = (dy === 0 || dy === -1) ? 1 : 2;
+
+            for (let lx = -radius; lx <= radius; lx++) {
+                for (let lz = -radius; lz <= radius; lz++) {
+                    const absX = Math.abs(lx);
+                    const absZ = Math.abs(lz);
+
+                    // Cortar os cantos extremos para o formato orgânico de "cruz"
+                    if (absX === radius && absZ === radius) {
+                        // Níveis de topo e base perdem sempre as quinas
+                        if (dy === 0 || dy === -3) continue;
+                        
+                        // Níveis intermédios perdem as quinas aleatoriamente
+                        if (this.getSeededRandom(wx + lx, currentY, wz + lz) > 0.5) continue;
+                    }
+
+                    // Ignorar o centro inferior, que é reservado para o tronco
+                    if (lx === 0 && lz === 0 && dy < 0) continue;
+
+                    const leafKey = `${wx + lx},${currentY},${wz + lz}`;
+                    if (!this.worldData.has(leafKey)) {
+                        this.worldData.set(leafKey, BLOCKS.LEAVES);
+                    }
+                }
+            }
+        }
+
+        // 2. GERAR O TRONCO (Substituindo o centro)
+        for (let th = 0; th < height; th++) {
+            this.worldData.set(`${wx},${y + th},${wz}`, BLOCKS.WOOD);
+        }
+    }
+
     populateChunkData(cx, cz) {
         const chunkKey = `${cx},${cz}`;
         if (this.populatedChunks.has(chunkKey)) return;
@@ -2494,16 +2538,10 @@ export class MinecraftEngine {
                         const treeChance = isForestBiome ? 0.08 : 0.018;
 
                         if (rand < treeChance) {
-                            for (let th = 1; th <= 5; th++) this.worldData.set(`${wx},${h+th},${wz}`, BLOCKS.WOOD);
-                            for (let lx = -2; lx <= 2; lx++) {
-                                for (let lz = -2; lz <= 2; lz++) {
-                                    for (let ly = 3; ly <= 4; ly++) {
-                                        if (Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
-                                        const k = `${wx+lx},${h+ly},${wz+lz}`;
-                                        if (!this.worldData.has(k)) this.worldData.set(k, BLOCKS.LEAVES);
-                                    }
-                                }
-                            }
+                            
+                            // --> GERA A ÁRVORE CLASSICA AQUI! <--
+                            this.generateTree(wx, h + 1, wz);
+
                         } else if (rand < 0.12) {
                             this.worldData.set(`${wx},${h+1},${wz}`, BLOCKS.TALL_GRASS);
                         } else if (rand < 0.16) {

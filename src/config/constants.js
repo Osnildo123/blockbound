@@ -520,6 +520,61 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
+// REDESENHA AS FOLHAS DA ÁRVORE (Coluna 6, Linha 0 - Com Transparência)
+// ============================================================
+(function drawLeaves() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 6 * tileSize; // Coluna 6 (Folhas)
+    const tileY = 0 * tileSize; // Linha 0
+
+    // Limpa a área completamente para os buracos ficarem transparentes
+    ctx.clearRect(tileX, tileY, tileSize, tileSize);
+
+    // Matriz 16x16 com '.' representando buracos transparentes
+    const pixels = [
+        "34.12.43.2.34.12",
+        ".123..24.31..23.",
+        "2.42.13.3.1.42.1",
+        ".1.4..12.42.1.34",
+        "4.31.24.31.23.1.",
+        ".2.23.1.42..13.2",
+        "12..42.3..24.1..",
+        ".3..12.43.12.34.",
+        "2.43..21.4..31.2",
+        ".1.24.3..24.1..3",
+        "42..1.23.1.2.42.",
+        "3.13.4..21.3.1.3",
+        ".24.1..34.21.4..",
+        "1..32.4..1.23.12",
+        ".42..1.32.42..1.",
+        "2..4.2..3..42.1."
+    ];
+
+    const palette = {
+        '1': '#193b0b', // Verde sombra profunda
+        '2': '#245210', // Verde escuro
+        '3': '#306e15', // Verde médio (Base)
+        '4': '#3a8519'  // Verde iluminado
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (char !== '.' && palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
 // O GERADOR DE ÍCONES FICA NO FINAL DE TUDO!
 // ============================================================
 export const BLOCK_ICONS = {};
