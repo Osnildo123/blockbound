@@ -17,7 +17,7 @@ export class VoxelMob {
         this.fuseMax = 1.5;
         this.hasPlayedFuseSound = false;
         
-        // NOVO: Temporizador de invulnerabilidade
+        // Temporizador de invulnerabilidade
         this.immunityTimer = 0;
 
         // GARANTE QUE NENHUM ANIMAL NASÇA DENTRO DA ÁGUA
@@ -84,119 +84,357 @@ export class VoxelMob {
         this.legs = [];
 
         if (type === 'cow') {
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.8 });
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 1.2), bodyMat);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a3222, roughness: 0.8 });    // Castanho escuro
+            const spotMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.8 });    // Manchas brancas
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xdbb89a, roughness: 0.8 });    // Focinho/Pele
+            const udderMat = new THREE.MeshStandardMaterial({ color: 0xf49ac2, roughness: 0.8 });  // Úbere (Rosa)
+            const hornMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.6 });   // Chifres
+            const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const eyeBlackMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const hoofMat = new THREE.MeshStandardMaterial({ color: 0x221a14, roughness: 0.9 });    // Cascos
+            const nostrilMat = new THREE.MeshStandardMaterial({ color: 0x8a6243 });
+
+            // 1. CORPO
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.82, 1.22), bodyMat);
             body.position.y = 0.7;
             group.add(body);
 
-            const spotMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
-            const spot = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.4, 0.5), spotMat);
-            spot.position.set(0, 0.75, 0.1);
-            group.add(spot);
+            // Manchas brancas em relevo
+            const spot1 = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.5, 0.5), spotMat);
+            spot1.position.set(0, 0.75, 0.1);
+            const spot2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.84, 0.4), spotMat);
+            spot2.position.set(-0.1, 0.7, -0.3);
+            group.add(spot1); group.add(spot2);
+
+            // Úbere (Tetas) por baixo do corpo
+            const udder = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.3), udderMat);
+            udder.position.set(0, 0.25, -0.1);
+            group.add(udder);
+
+            // Rabo
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.08), bodyMat);
+            tail.position.set(0, 0.6, -0.62);
+            tail.rotation.x = 0.15;
+            group.add(tail);
+
+            // 2. CABEÇA
+            const headGroup = new THREE.Group();
 
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), bodyMat);
-            head.position.set(0, 1.1, 0.65);
-            group.add(head);
+            head.position.set(0, 1.05, 0.65);
+            headGroup.add(head);
 
-            const snoutMat = new THREE.MeshStandardMaterial({ color: 0xdbb89a, roughness: 0.8 });
-            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.2), snoutMat);
-            snout.position.set(0, 1.0, 0.9);
-            group.add(snout);
+            // Mancha branca na testa
+            const forehead = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.02), spotMat);
+            forehead.position.set(0, 1.15, 0.901);
+            headGroup.add(forehead);
 
-            const hornMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-            const hL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), hornMat);
-            hL.position.set(-0.28, 1.35, 0.6);
-            const hR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), hornMat);
-            hR.position.set(0.28, 1.35, 0.6);
-            group.add(hL); group.add(hR);
+            // Focinho 3D + Narinas
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.22), skinMat);
+            snout.position.set(0, 0.92, 0.9);
+            headGroup.add(snout);
 
-            const legGeo = new THREE.BoxGeometry(0.22, 0.6, 0.22);
+            const nL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.02), nostrilMat);
+            nL.position.set(-0.1, 0.92, 1.011);
+            const nR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.02), nostrilMat);
+            nR.position.set(0.1, 0.92, 1.011);
+            headGroup.add(nL); headGroup.add(nR);
+
+            // Chifres
+            const hL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.1), hornMat);
+            hL.position.set(-0.3, 1.35, 0.6);
+            const hR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.1), hornMat);
+            hR.position.set(0.3, 1.35, 0.6);
+            headGroup.add(hL); headGroup.add(hR);
+
+            // Orelhas
+            const earL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.1), bodyMat);
+            earL.position.set(-0.32, 1.1, 0.6);
+            earL.rotation.z = -0.2;
+            const earR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.1), bodyMat);
+            earR.position.set(0.32, 1.1, 0.6);
+            earR.rotation.z = 0.2;
+            headGroup.add(earL); headGroup.add(earR);
+
+            // Olhos
+            const eyeWL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeWhiteMat);
+            eyeWL.position.set(-0.21, 1.08, 0.881);
+            const eyeBL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.02), eyeBlackMat);
+            eyeBL.position.set(-0.23, 1.08, 0.882);
+
+            const eyeWR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeWhiteMat);
+            eyeWR.position.set(0.21, 1.08, 0.881);
+            const eyeBR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.02), eyeBlackMat);
+            eyeBR.position.set(0.23, 1.08, 0.882);
+
+            headGroup.add(eyeWL); headGroup.add(eyeBL);
+            headGroup.add(eyeWR); headGroup.add(eyeBR);
+
+            group.add(headGroup);
+
+            // 3. PATAS COM CASCOS
             const legPositions = [
                 [-0.28, 0.3, 0.4], [0.28, 0.3, 0.4],
                 [-0.28, 0.3, -0.4], [0.28, 0.3, -0.4]
             ];
             legPositions.forEach(pos => {
-                const leg = new THREE.Mesh(legGeo, bodyMat);
-                leg.position.set(...pos);
-                group.add(leg);
-                this.legs.push(leg);
+                const legGroup = new THREE.Group();
+
+                const legUpper = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.48, 0.22), bodyMat);
+                legUpper.position.y = 0.06;
+                legGroup.add(legUpper);
+
+                const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.22), hoofMat);
+                hoof.position.y = -0.24;
+                legGroup.add(hoof);
+
+                legGroup.position.set(...pos);
+                group.add(legGroup);
+                this.legs.push(legGroup);
             });
 
         } else if (type === 'pig') {
-            const pigMat = new THREE.MeshStandardMaterial({ color: 0xffa07a, roughness: 0.8 });
+            const pigMat = new THREE.MeshStandardMaterial({ color: 0xf49ac2, roughness: 0.8 });    // Rosa pele
+            const snoutMat = new THREE.MeshStandardMaterial({ color: 0xe87cae, roughness: 0.7 });  // Rosa focinho
+            const nostrilMat = new THREE.MeshStandardMaterial({ color: 0x8a335c, roughness: 0.9 });// Narinas
+            const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });               // Olhos
+            const eyeBlackMat = new THREE.MeshStandardMaterial({ color: 0x111111 });               // Pupilas
+            const hoofMat = new THREE.MeshStandardMaterial({ color: 0x593d2c, roughness: 0.9 });  // Cascos
+            const earMat = new THREE.MeshStandardMaterial({ color: 0xe87cae, roughness: 0.8 });   // Orelhas
+
+            // 1. CORPO
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 1.1), pigMat);
             body.position.y = 0.6;
             group.add(body);
 
+            // Rabo enrolado atrás
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.08), snoutMat);
+            tail.position.set(0, 0.75, -0.58);
+            tail.rotation.x = 0.45;
+            group.add(tail);
+
+            // 2. CABEÇA
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), pigMat);
             head.position.set(0, 0.85, 0.6);
             group.add(head);
 
-            const snoutMat = new THREE.MeshStandardMaterial({ color: 0xff8c69 });
-            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.18), snoutMat);
-            snout.position.set(0, 0.8, 0.85);
+            // Orelhas descaídas
+            const earL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), earMat);
+            earL.position.set(-0.24, 1.1, 0.55);
+            earL.rotation.z = -0.25;
+
+            const earR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.06), earMat);
+            earR.position.set(0.24, 1.1, 0.55);
+            earR.rotation.z = 0.25;
+            group.add(earL); group.add(earR);
+
+            // Focinho 3D
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.16), snoutMat);
+            snout.position.set(0, 0.78, 0.88);
             group.add(snout);
 
-            const legGeo = new THREE.BoxGeometry(0.22, 0.5, 0.22);
+            // Narinas
+            const nostrilL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.02), nostrilMat);
+            nostrilL.position.set(-0.07, 0.78, 0.961);
+            const nostrilR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.02), nostrilMat);
+            nostrilR.position.set(0.07, 0.78, 0.961);
+            group.add(nostrilL); group.add(nostrilR);
+
+            // Olhos
+            const eyeWL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), eyeWhiteMat);
+            eyeWL.position.set(-0.16, 0.92, 0.851);
+            const eyeBL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.02), eyeBlackMat);
+            eyeBL.position.set(-0.185, 0.92, 0.852);
+
+            const eyeWR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), eyeWhiteMat);
+            eyeWR.position.set(0.16, 0.92, 0.851);
+            const eyeBR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.02), eyeBlackMat);
+            eyeBR.position.set(0.185, 0.92, 0.852);
+
+            group.add(eyeWL); group.add(eyeBL);
+            group.add(eyeWR); group.add(eyeBR);
+
+            // 3. PATAS COM CASCOS
             const legPositions = [
-                [-0.28, 0.25, 0.35], [0.28, 0.25, 0.35],
-                [-0.28, 0.25, -0.35], [0.28, 0.25, -0.35]
+                [-0.26, 0.25, 0.35], [0.26, 0.25, 0.35],
+                [-0.26, 0.25, -0.35], [0.26, 0.25, -0.35]
             ];
+
             legPositions.forEach(pos => {
-                const leg = new THREE.Mesh(legGeo, pigMat);
-                leg.position.set(...pos);
-                group.add(leg);
-                this.legs.push(leg);
+                const legGroup = new THREE.Group();
+
+                const legUpper = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.38, 0.2), pigMat);
+                legUpper.position.y = 0.06;
+                legGroup.add(legUpper);
+
+                const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.2), hoofMat);
+                hoof.position.y = -0.19;
+                legGroup.add(hoof);
+
+                legGroup.position.set(...pos);
+                group.add(legGroup);
+                this.legs.push(legGroup);
             });
 
         } else if (type === 'sheep') {
-            const woolMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.9 });
-            const skinMat = new THREE.MeshStandardMaterial({ color: 0xdbb89a, roughness: 0.8 });
+            const woolMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.95 });   // Lã
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xdbb89a, roughness: 0.8 });    // Pele
+            const snoutMat = new THREE.MeshStandardMaterial({ color: 0xc49a7a, roughness: 0.85 });  // Focinho
+            const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });               // Olhos
+            const eyeBlackMat = new THREE.MeshStandardMaterial({ color: 0x111111 });               // Pupilas
+            const hoofMat = new THREE.MeshStandardMaterial({ color: 0x6e523b, roughness: 0.9 });    // Cascos
+            const earMat = new THREE.MeshStandardMaterial({ color: 0xcba085, roughness: 0.8 });     // Orelhas
 
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 1.2), woolMat);
-            body.position.y = 0.7;
-            group.add(body);
+            // 1. CORPO (Lã fofa)
+            const woolBody = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.82, 1.22), woolMat);
+            woolBody.position.y = 0.7;
+            group.add(woolBody);
 
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), skinMat);
-            head.position.set(0, 0.95, 0.65);
-            group.add(head);
+            // 2. CABEÇA
+            const headGroup = new THREE.Group();
 
-            const legGeo = new THREE.BoxGeometry(0.2, 0.5, 0.2);
+            const headSkin = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.48), skinMat);
+            headSkin.position.set(0, 0.92, 0.68);
+            headGroup.add(headSkin);
+
+            const headWool = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.22, 0.46), woolMat);
+            headWool.position.set(0, 1.1, 0.65);
+            headGroup.add(headWool);
+
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.16), snoutMat);
+            snout.position.set(0, 0.85, 0.92);
+            headGroup.add(snout);
+
+            const earL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.18), earMat);
+            earL.position.set(-0.25, 0.98, 0.65);
+            earL.rotation.z = -0.2;
+
+            const earR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.18), earMat);
+            earR.position.set(0.25, 0.98, 0.65);
+            earR.rotation.z = 0.2;
+            headGroup.add(earL); headGroup.add(earR);
+
+            const eyeWL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeWhiteMat);
+            eyeWL.position.set(-0.16, 0.95, 0.921);
+            const eyeBL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.02), eyeBlackMat);
+            eyeBL.position.set(-0.18, 0.95, 0.922);
+
+            const eyeWR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeWhiteMat);
+            eyeWR.position.set(0.16, 0.95, 0.921);
+            const eyeBR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.02), eyeBlackMat);
+            eyeBR.position.set(0.18, 0.95, 0.922);
+
+            headGroup.add(eyeWL); headGroup.add(eyeBL);
+            headGroup.add(eyeWR); headGroup.add(eyeBR);
+
+            group.add(headGroup);
+
+            // 3. PATAS
             const legPositions = [
-                [-0.3, 0.25, 0.4], [0.3, 0.25, 0.4],
-                [-0.3, 0.25, -0.4], [0.3, 0.25, -0.4]
+                [-0.28, 0.25, 0.4], [0.28, 0.25, 0.4],
+                [-0.28, 0.25, -0.4], [0.28, 0.25, -0.4]
             ];
+
             legPositions.forEach(pos => {
-                const leg = new THREE.Mesh(legGeo, skinMat);
-                leg.position.set(...pos);
-                group.add(leg);
-                this.legs.push(leg);
+                const legGroup = new THREE.Group();
+
+                const legWool = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.24), woolMat);
+                legWool.position.y = 0.12;
+                legGroup.add(legWool);
+
+                const legLower = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.18), skinMat);
+                legLower.position.y = -0.08;
+                legGroup.add(legLower);
+
+                const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.18), hoofMat);
+                hoof.position.y = -0.21;
+                legGroup.add(hoof);
+
+                legGroup.position.set(...pos);
+                group.add(legGroup);
+                this.legs.push(legGroup);
             });
 
         } else if (type === 'chicken') {
-            const featherMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
-            const beakMat = new THREE.MeshStandardMaterial({ color: 0xffa500 });
-            const wattleMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const featherMat = new THREE.MeshStandardMaterial({ color: 0xf8f8f8, roughness: 0.85 }); // Penas brancas
+            const beakMat = new THREE.MeshStandardMaterial({ color: 0xff9900, roughness: 0.7 });    // Bico/Pés laranja
+            const wattleMat = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.8 });  // Crista/Papo vermelho
+            const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const eyeBlackMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.55), featherMat);
+            // 1. CORPO E ASAS
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.48, 0.58), featherMat);
             body.position.y = 0.45;
             group.add(body);
 
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.3), featherMat);
-            head.position.set(0, 0.75, 0.25);
-            group.add(head);
+            // Asas nas laterais
+            const wingL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.42), featherMat);
+            wingL.position.set(-0.27, 0.48, 0.0);
+            const wingR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.42), featherMat);
+            wingR.position.set(0.27, 0.48, 0.0);
+            group.add(wingL); group.add(wingR);
 
-            const beak = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), beakMat);
-            beak.position.set(0, 0.72, 0.45);
-            const wattle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.1), wattleMat);
-            wattle.position.set(0, 0.6, 0.42);
-            group.add(beak); group.add(wattle);
+            // Cauda levantada
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.12), featherMat);
+            tail.position.set(0, 0.6, -0.28);
+            tail.rotation.x = -0.35;
+            group.add(tail);
 
-            const legGeo = new THREE.BoxGeometry(0.08, 0.3, 0.08);
-            const l1 = new THREE.Mesh(legGeo, beakMat); l1.position.set(-0.12, 0.15, 0.05);
-            const l2 = new THREE.Mesh(legGeo, beakMat); l2.position.set(0.12, 0.15, 0.05);
-            group.add(l1); group.add(l2);
-            this.legs.push(l1, l2);
+            // 2. CABEÇA
+            const headGroup = new THREE.Group();
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.32), featherMat);
+            head.position.set(0, 0.78, 0.22);
+            headGroup.add(head);
+
+            // Crista Vermelha no topo
+            const comb = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.24), wattleMat);
+            comb.position.set(0, 1.0, 0.22);
+            headGroup.add(comb);
+
+            // Bico 3D
+            const beak = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.18), beakMat);
+            beak.position.set(0, 0.74, 0.45);
+            headGroup.add(beak);
+
+            // Papo Vermelho
+            const wattle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.1), wattleMat);
+            wattle.position.set(0, 0.6, 0.41);
+            headGroup.add(wattle);
+
+            // Olhos Laterais
+            const eyeWL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.06), eyeWhiteMat);
+            eyeWL.position.set(-0.151, 0.82, 0.28);
+            const eyeBL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.04), eyeBlackMat);
+            eyeBL.position.set(-0.152, 0.82, 0.29);
+
+            const eyeWR = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.06), eyeWhiteMat);
+            eyeWR.position.set(0.151, 0.82, 0.28);
+            const eyeBR = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.04), eyeBlackMat);
+            eyeBR.position.set(0.152, 0.82, 0.29);
+
+            headGroup.add(eyeWL); headGroup.add(eyeBL);
+            headGroup.add(eyeWR); headGroup.add(eyeBR);
+
+            group.add(headGroup);
+
+            // 3. PATAS E PÉS COM DEDOS
+            const legPositions = [[-0.12, 0.18, 0.05], [0.12, 0.18, 0.05]];
+            legPositions.forEach(pos => {
+                const legGroup = new THREE.Group();
+
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.08), beakMat);
+                leg.position.y = 0.02;
+                legGroup.add(leg);
+
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.2), beakMat);
+                foot.position.set(0, -0.14, 0.05);
+                legGroup.add(foot);
+
+                legGroup.position.set(...pos);
+                group.add(legGroup);
+                this.legs.push(legGroup);
+            });
 
         } else if (type === 'creeper') {
             const creeperMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.8 });
@@ -361,7 +599,6 @@ export class VoxelMob {
     }
 
     takeDamage(amount) {
-        // NOVO: Se o mob estiver imune temporariamente (porque acabou de disparar), ignora o dano!
         if (this.immunityTimer > 0) return;
 
         this.hp -= amount;
@@ -466,7 +703,6 @@ export class VoxelMob {
     update(delta) {
         if (!this.mesh) return;
 
-        // Atualiza o timer de imunidade
         if (this.immunityTimer > 0) {
             this.immunityTimer -= delta;
         }
@@ -540,7 +776,6 @@ export class VoxelMob {
                 }
             } 
             else if (this.type === 'skeleton') {
-                // LÓGICA DE ATAQUE À DISTÂNCIA DO ESQUELETO
                 if (target.dist < 20) {
                     const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
                     const flatDir = new THREE.Vector3(dir.x, 0, dir.z);
@@ -550,7 +785,6 @@ export class VoxelMob {
                         this.rotation = Math.atan2(flatDir.x, flatDir.z);
                         this.mesh.rotation.y = this.rotation;
 
-                        // Tenta manter distância tática (entre 7 e 13 blocos de distância)
                         let moveSpeed = 0;
                         if (target.dist > 13) moveSpeed = 2.4;
                         else if (target.dist < 7) moveSpeed = -1.8;
@@ -564,11 +798,8 @@ export class VoxelMob {
                         }
                     }
 
-                    // Disparo de Flechas
                     if (this.attackCooldown <= 0 && target.dist < 18) {
                         this.attackCooldown = 2.2;
-                        
-                        // NOVO: Dá 0.3s de imunidade ao esqueleto no instante em que ele dispara!
                         this.immunityTimer = 0.3;
 
                         const targetY = target.pos.y + 0.5;
@@ -578,7 +809,6 @@ export class VoxelMob {
                             target.pos.z - this.mesh.position.z + (Math.random() - 0.5) * 0.4
                         ).normalize();
 
-                        // PROJEÇÃO FRONTAL AUMENTADA
                         const offset = 1.5;
                         const spawnX = this.mesh.position.x + shootDir.x * offset;
                         const spawnY = this.mesh.position.y + 1.2 + shootDir.y * offset;
@@ -601,7 +831,6 @@ export class VoxelMob {
                 }
             } 
             else {
-                // OUTROS MOBS CORPO A CORPO (EX: ARANHA)
                 if (target.dist < 18) {
                     const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
                     dir.y = 0;

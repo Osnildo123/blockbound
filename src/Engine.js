@@ -428,6 +428,7 @@ export class MinecraftEngine {
         this.renderDistance = this.settings.renderDistance || 5;
         this.chunks = new Map();
         this.worldData = new Map();
+        this.blockRotations = new Map();
         this.modifiedBlocks = new Map();
         this.chestData = new Map();
         this.doorMeshes = new Map();
@@ -2592,7 +2593,7 @@ export class MinecraftEngine {
             { dir: [-1, 0, 0], corners: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], tileKey: 'side' },
             { dir: [0, 1, 0], corners: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]], tileKey: 'top' },
             { dir: [0, -1, 0], corners: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], tileKey: 'bottom' },
-            { dir: [0, 0, 1], corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], tileKey: 'front' }, // <-- MUDADO PARA 'front'
+            { dir: [0, 0, 1], corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], tileKey: 'front' },
             { dir: [0, 0, -1], corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], tileKey: 'side' }
         ];
 
@@ -2665,10 +2666,27 @@ export class MinecraftEngine {
                                 targetCol.push(aoVal, aoVal, aoVal);
                             }
 
-                            // Substitua a linha antiga do tileCoord por esta:
-                            const tileCoord = (f.tileKey === 'front' && bInfo.front) 
+                            // ============================================================
+                            // ATRIBUI A FACE FRONTAL DINÂMICA DA FORNALHA
+                            // ============================================================
+                            let actualTileKey = f.tileKey;
+                            if (type === BLOCKS.FURNACE) {
+                                const blockKey = `${wx},${y},${wz}`;
+                                const targetDir = (this.blockRotations && this.blockRotations.get(blockKey)) || [0, 0, 1];
+
+                                if (f.dir[1] === 0) { // Apenas faces laterais
+                                    if (f.dir[0] === targetDir[0] && f.dir[2] === targetDir[2]) {
+                                        actualTileKey = 'front';
+                                    } else {
+                                        actualTileKey = 'side';
+                                    }
+                                }
+                            }
+
+                            const tileCoord = (actualTileKey === 'front' && bInfo.front) 
                                 ? bInfo.front 
-                                : (bInfo[f.tileKey] || bInfo.side || bInfo.top);
+                                : (bInfo[actualTileKey] || bInfo.side || bInfo.top);
+
                             const uMin = tileCoord[0] * (16 / 128);
                             const vMin = 1.0 - ((tileCoord[1] + 1) * (16 / 128));
                             const uMax = uMin + (16 / 128);
@@ -3368,6 +3386,23 @@ export class MinecraftEngine {
 
             this.setBlockModified(px, py, pz, item.id);
 
+            // ============================================================
+            // CALCULA A ORIENTAÇÃO DA FORNALHA VIRADA PARA O JOGADOR
+            // ============================================================
+            if (item.id === BLOCKS.FURNACE) {
+                const dx = this.position.x - (px + 0.5);
+                const dz = this.position.z - (pz + 0.5);
+
+                let frontDir = [0, 0, 1];
+                if (Math.abs(dx) > Math.abs(dz)) {
+                    frontDir = dx > 0 ? [1, 0, 0] : [-1, 0, 0];
+                } else {
+                    frontDir = dz > 0 ? [0, 0, 1] : [0, 0, -1];
+                }
+
+                this.blockRotations.set(`${px},${py},${pz}`, frontDir);
+            }
+
             if (item.id === BLOCKS.DOOR) {
                 const THREE_REF = window.THREE || (typeof THREE !== 'undefined' ? THREE : null);
                 let doorRotation = 0;
@@ -3387,7 +3422,7 @@ export class MinecraftEngine {
             }
 
             item.count--;
-            if (this.sound) this.sound.playPlace(item.id); // Passa o tipo de bloco colocado
+            if (this.sound) this.sound.playPlace(item.id);
             this.updateUI();
 
             this.rebuildChunkAtBlock(px, py, pz);
