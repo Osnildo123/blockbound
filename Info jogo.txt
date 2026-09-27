@@ -1,0 +1,131 @@
+para sincronizar no Github pelo VS Code (Terminal)
+
+git add .
+git commit -m "backup"
+git push
+git pull (para puxar arquivos do Github)
+
+----------------------------------------
+
+
+Agora precisamos resolver um Bug que não acontece comigo, mas está acontecendo com outros jogadores quando jogam nosso jogo, o Bug da camera. Quando o jogador está próximo há bloco ou objetivo, a camera gira sozinha para cima, como se fosse um problema de colisão
+
+
+
+Enquanto os jogadores irão testar, se o bug da camera foi resolvido, vamos seguir para ajustar outro bug. 
+
+Quando crio um novo mundo, jogo nele, saio para o menu inicial e retorno a ele, eu continuo de onde parei sem perder o progresso, até ai tudo certo, porém quando eu atualizo a página e tento entrar novamente no mundo que eu havia criado anteriormente, a tela fica preta como se tivesse corrompido ou perdido o caminho do mundo. Preciso que o jogador não perca o progresso mesmo saindo do jogo e voltando a ele, tanto no Singleplayer quanto no Multiplayer
+
+
+
+Hoje temos como criar o servidor LAN, que está rodando bem, mas quero também poder criar e hospedar na minha máquina um servidor para que meus amigos em outras máquinas possam jogar, tipo o servidor LAN, mas na rede externa também
+
+
+https://blockbound-survival-default-rtdb.firebaseio.com/
+:
+null
+
+
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBEu7vVWy8XRk5hk_TogYKnaEXqKWQl-sI",
+  authDomain: "blockbound-survival.firebaseapp.com",
+  databaseURL: "https://blockbound-survival-default-rtdb.firebaseio.com",
+  projectId: "blockbound-survival",
+  storageBucket: "blockbound-survival.firebasestorage.app",
+  messagingSenderId: "497391909447",
+  appId: "1:497391909447:web:4cf270ba2d27db521bcf62"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{
+  "rules": {
+    ".read": "now < 1792638000000",  // 2026-10-22
+    ".write": "now < 1792638000000",  // 2026-10-22
+  }
+}
+
+
+Re-escreva os seguintes arquvios completos
+
+Egine.js
+NetworkManager.js
+
+
+
+
+Antes vamos corrigir mais um problema:
+
+Ajustar, Creepers não estão mais inflando e explodindo quando se aproximam do jogador, melhorar também o nível de qualidade visual dos esqueletos
+
+
+Ainda assim não funcionou, que tal recomeçarmos, vamos voltar a versão do jogo antes de eu pedir essas alterações abaixo
+
+
+"Agora vamos melhorar o menu:
+
+.Quando o jogador for CRIAR SALA PUBLICA, ele poderá adicionar um nome para a sala e colocar senha se ele quiser
+
+.Aprimorar o menu incial, deixar com mais cara de Minecraft"
+
+
+O chat é no T
+
+
+BUG MATHEUS:
+
+CORRIGIDO .SPAWN DOS ANIMAIS EM BAIXO DA AGUA
+
+CORRIGIDO .INIMIGOS SPAWNANDO PERTO DOS JOGADORES, AJUSTAR PARA SPAWNAR DISTANTE
+
+CORRIGIDO .Jogadores que se desconectaram, o corpo deles continua parado no mundo, sem ser excluido
+
+CORRIGIDO .Quando a ovelha é morta, ela vira um bloco de madeira e não de carne, corrigir
+
+CORRIGIDO .No chat, se eu for escrever algo com E, o menu abre mesmo no modo chat, e quando escrevo algo com T, o T não é escrito por provavel conflito 
+
+CORRIGIDO .Bloquear a opção do jogador apertar com o direito do mouse para acessar as opções do navegador, como inspecionar elemento
+
+CORRIGIDO .A lista de dano que aparece na tela a esquerda, explode de mensagem quando o jogador começa a sofrer dano em baixo da agua, como podemos ajustar isso para não poluir a tela e os avisos sonoros
+
+CORRIGIDO .A porta aparece sempre em uma direlção fixa, independente da direção que o jogador estava quando colocou ela, ela precisa apercer sempre na direção que o jogador está apontando
+
+CORRIGIDO .Alguns peixes estão girando em 360 graus sem parar
+
+CORRIGIDO .Se eu crio uma porta no mundo do meu servidor, se outro jogar entrar depois da criação, essa porta não aparece para ele, só aparece se eu criar a porta com ele já dentro da sessão
+
+.Luz da fogueira não aparece para um novo jogador que entrou na sala após ela ser criada por outro jogador
+
+.Quando adicionar um bloco na agua, ela deve substituir o bloco da agua
+
+
+
+git config --global user.name "Osnildo123"
+
+
+git config --global user.email "osnildo.bpj2@gmail.com"
+
+
