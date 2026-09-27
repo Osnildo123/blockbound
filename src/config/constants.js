@@ -1,12 +1,6 @@
 import { TextureAtlasGenerator } from '../world/TextureAtlas.js';
 
 export const BLOCKS = {
-    FLINT_STEEL: 35,
-    CRAFTING_TABLE: 51,
-    FURNACE: 52,
-    IRON_INGOT: 53,
-    BUCKET: 54,        // <-- Balde Vazio
-    WATER_BUCKET: 55,  // <-- Balde com Água
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, WOOD: 4, LEAVES: 5, SAND: 6, PLANK: 7,
     RED_FLOWER: 8, YELLOW_FLOWER: 9, TALL_GRASS: 10, MUSHROOM: 11, BEDROCK: 12, COBBLE: 13,
     TORCH: 14, CAMPFIRE: 15, RAW_MEAT: 16, COOKED_MEAT: 17, WATER: 18,
@@ -14,12 +8,15 @@ export const BLOCKS = {
     SWORD: 23, AXE: 24, ELEMENTAL_CORE: 25, TOTEM: 26, PICKAXE: 27,
     GLASS: 28, DOOR: 29, CHEST: 30, BOW: 31, SNOW: 32, ICE: 33, CACTUS: 34,
     FLINT_STEEL: 35,
+    WOOD_PICKAXE: 36, STONE_PICKAXE: 37, IRON_PICKAXE: 38, GOLD_PICKAXE: 39, DIAMOND_PICKAXE: 40,
+    WOOD_AXE: 41, STONE_AXE: 42, IRON_AXE: 43, GOLD_AXE: 44, DIAMOND_AXE: 45,
+    WOOD_SWORD: 46, STONE_SWORD: 47, IRON_SWORD: 48, GOLD_SWORD: 49, DIAMOND_SWORD: 50,
     CRAFTING_TABLE: 51,
     FURNACE: 52,
     IRON_INGOT: 53,
-    WOOD_PICKAXE: 36, STONE_PICKAXE: 37, IRON_PICKAXE: 38, GOLD_PICKAXE: 39, DIAMOND_PICKAXE: 40,
-    WOOD_AXE: 41, STONE_AXE: 42, IRON_AXE: 43, GOLD_AXE: 44, DIAMOND_AXE: 45,
-    WOOD_SWORD: 46, STONE_SWORD: 47, IRON_SWORD: 48, GOLD_SWORD: 49, DIAMOND_SWORD: 50
+    BUCKET: 54,        // Balde Vazio
+    WATER_BUCKET: 55,  // Balde com Água
+    GOLD_INGOT: 56     // Barra de Ouro
 };
 
 export const BLOCK_TILES = {
@@ -95,11 +92,11 @@ export const BLOCK_TILES = {
     },
 
     // IDs das Barras e Baldes configurados como ITENS (isTool: true)
+    // No final do BLOCK_TILES:
     53: { name: 'Barra de Ferro', top: [3, 3], isTool: true },
-    // No config/constants.js:
     54: { name: 'Balde', top: [0, 5], plant: true, isTool: true },
-    55: { name: 'Balde com Água', top: [1, 5], plant: true, isTool: true }
-
+    55: { name: 'Balde com Água', top: [1, 5], plant: true, isTool: true },
+    56: { name: 'Barra de Ouro', top: [6, 2], isTool: true } // <-- ADICIONA ESTA LINHA
 };
 
 export const BLOCK_PARTICLE_COLORS = {
@@ -201,10 +198,120 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
     if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
 })();
 
+// ============================================================
+// DESENHA O BALDE VAZIO NO ATLAS (Coluna 0, Linha 5)
+// ============================================================
+(function drawBucket() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16; 
+    const tileX = 0 * tileSize; 
+    const tileY = 5 * tileSize; 
+
+    const pixels = [
+        "....KKKKKKKK....",
+        "..KKLLLLLLLLKK..",
+        "..KLLLLLLLLLL2K.",
+        ".KKKKKKKKKKKKKKK",
+        ".KWWLGGGGGGGDG2K",
+        ".KWWLGGGGGGGDG2K",
+        ".KWWLGGGGGGGDG2K",
+        ".KWWWLGGGGGGDG2K",
+        ".KWWWLGGGGGGDG2K",
+        ".KWWWWLGGGGGGGGK",
+        "..KWWWWLGGGGGGG2K",
+        "..KWWWWWGGGGGGG2K",
+        "..KWWWWWGGGGGGG2K",
+        "....KWWWWGGGGG2K.",
+        "....KKKKKKKKKK..",
+        "................"
+    ];
+
+    const palette = {
+        'K': '#2a2a2a',
+        'W': '#ffffff',
+        'L': '#d0d0d0',
+        'G': '#888888',
+        'D': '#4a4a4a',
+        '2': '#666666'
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (char !== '.' && palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// DESENHA O BALDE COM ÁGUA NO ATLAS (Coluna 1, Linha 5)
+// ============================================================
+(function drawWaterBucket() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16; 
+    const tileX = 1 * tileSize; 
+    const tileY = 5 * tileSize; 
+
+    const pixels = [
+        "....KKKKKKKK....",
+        "..KK11223322KK..",
+        "..K11223322112K.",
+        ".K1122332211221K",
+        ".KDKKKKKKKKKKDK.",
+        ".KL22222232GGG2K",
+        ".KWL222223GGDG2K",
+        ".KWL222223GGDG2K",
+        ".KWWL22223GGDG2K",
+        ".KWWWL2223GGDG2K",
+        ".KWWWWL223GGGG2K",
+        "..KWWWWL232GGG2K",
+        "..KWWWWW332GGG2K",
+        "..KWWWWW332GGG2K",
+        "....KWWWW33GG2K.",
+        "....KKKKKKKKKK.."
+    ];
+
+    const palette = {
+        'K': '#222222',
+        'W': '#ffffff',
+        'L': '#d0d0d0',
+        'G': '#888888',
+        'D': '#4a4a4a',
+        '1': '#00d5ff',
+        '2': '#0088ff',
+        '3': '#0055cc'
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (char !== '.' && palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// O GERADOR DE ÍCONES FICA NO FINAL DE TUDO!
+// ============================================================
 export const BLOCK_ICONS = {};
 for (let id in BLOCK_TILES) {
     const b = BLOCK_TILES[id];
-    // Ao criar o ícone da fornalha para o inventário, forçamos o uso da face da frente (se existir)
     const sideX = b.front ? b.front[0] : (b.side ? b.side[0] : b.top[0]);
     const sideY = b.front ? b.front[1] : (b.side ? b.side[1] : b.top[1]);
 

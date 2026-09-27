@@ -1,7 +1,7 @@
 // Receitas da Fornalha (Ingrediente -> Resultado)
 const SMELTING_RECIPES = {
     [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
-    [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_ORE, cookTime: 8.0 },
+    [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 }, // <-- CORRIGIDO AQUI
     [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
     [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
     [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
@@ -194,7 +194,7 @@ export class MinecraftEngine {
         if (!itemId) return null;
         const recipes = {
             [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
-            [BLOCKS.GOLD_ORE]: { result: 56, cookTime: 8.0 },
+            [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 }, // <-- CORRIGIDO AQUI
             [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
             [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
             [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
