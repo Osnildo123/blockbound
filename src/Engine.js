@@ -49,37 +49,53 @@ export class MinecraftEngine {
         this.waterQueue.push({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), dist });
     }
 
-    // Processa o escoamento da água em tempo real
+    // Marca apenas os chunks afetados para reconstrução única
+    markChunkForRebuild(x, z, set) {
+        const cx = Math.floor(x / this.chunkSize);
+        const cz = Math.floor(z / this.chunkSize);
+        set.add(`${cx},${cz}`);
+
+        const localX = ((x % this.chunkSize) + this.chunkSize) % this.chunkSize;
+        const localZ = ((z % this.chunkSize) + this.chunkSize) % this.chunkSize;
+
+        if (localX === 0) set.add(`${cx - 1},${cz}`);
+        if (localX === 15) set.add(`${cx + 1},${cz}`);
+        if (localZ === 0) set.add(`${cx},${cz - 1}`);
+        if (localZ === 15) set.add(`${cx},${cz + 1}`);
+    }
+
+    // ALGORITMO DE FLUXO DE ÁGUA OTIMIZADO (SEM QUEDAS DE FPS)
     updateWaterFlow(delta) {
         if (!this.waterQueue || this.waterQueue.length === 0) return;
 
         this.waterFlowTimer += delta;
-        if (this.waterFlowTimer < 0.12) return; 
+        if (this.waterFlowTimer < 0.08) return; // Ritmo suave
         this.waterFlowTimer = 0;
 
-        const currentBatch = [...this.waterQueue];
-        this.waterQueue = [];
+        // Limita a 10 blocos processados por tick para evitar picos de CPU/GPU
+        const maxBatchSize = 10;
+        const currentBatch = this.waterQueue.splice(0, maxBatchSize);
 
         const maxHorizontalSpread = 4;
+        const chunksToRebuild = new Set(); // Evita reconstruções duplicadas
 
         for (let node of currentBatch) {
             const { x, y, z, dist } = node;
 
-            // Se o bloco já não for água, cancela o fluxo
             if (this.getBlock(x, y, z) !== BLOCKS.WATER) continue;
 
-            // 1. GRAVIDADE (Agora com o Z incluído!)
             const blockBelow = this.getBlock(x, y - 1, z);
+
+            // 1. GRAVIDADE
             if (y > 1 && blockBelow === BLOCKS.AIR) {
                 this.setBlockModified(x, y - 1, z, BLOCKS.WATER);
-                this.rebuildChunkAtBlock(x, y - 1, z);
-                
-                // A água cai verticalmente (reinicia a distância horizontal)
+                this.markChunkForRebuild(x, z, chunksToRebuild);
+
                 this.waterQueue.push({ x, y: y - 1, z, dist: 0 });
                 continue; 
             }
 
-            // 2. ESPALHAMENTO HORIZONTAL (Bateu no chão)
+            // 2. ESPALHAMENTO HORIZONTAL
             if (dist < maxHorizontalSpread && blockBelow !== BLOCKS.AIR && blockBelow !== BLOCKS.WATER) {
                 const neighbors = [
                     { x: x + 1, y, z },
@@ -91,11 +107,17 @@ export class MinecraftEngine {
                 for (let n of neighbors) {
                     if (this.getBlock(n.x, n.y, n.z) === BLOCKS.AIR) {
                         this.setBlockModified(n.x, n.y, n.z, BLOCKS.WATER);
-                        this.rebuildChunkAtBlock(n.x, n.y, n.z);
+                        this.markChunkForRebuild(n.x, n.z, chunksToRebuild);
                         this.waterQueue.push({ x: n.x, y: n.y, z: n.z, dist: dist + 1 });
                     }
                 }
             }
+        }
+
+        // RECONSTRÓI CADA CHUNK AFETADO APENAS UMA ÚNICA VEZ
+        for (let key of chunksToRebuild) {
+            const [rcx, rcz] = key.split(',').map(Number);
+            this.rebuildSingleChunk(rcx, rcz);
         }
     }
 
@@ -4040,7 +4062,7 @@ export class MinecraftEngine {
 
         this.updateUI();
     }
-    
+
     onWindowResize() {
         if (!this.camera || !this.renderer) return;
 
