@@ -94,11 +94,11 @@ export const BLOCK_TILES = {
         isFurnace: true 
     },
 
-    53: { name: 'Barra de Ferro', top: [5,2], plant: true },
-    
-// Adicionar no final do BLOCK_TILES:
-    54: { name: 'Balde', top: [4, 4], plant: true, isTool: true },
-    55: { name: 'Balde com Água', top: [3, 2], plant: true, isTool: true }
+    // IDs das Barras e Baldes configurados como ITENS (isTool: true)
+    53: { name: 'Barra de Ferro', top: [3, 3], isTool: true },
+    // No config/constants.js:
+    54: { name: 'Balde', top: [0, 5], plant: true, isTool: true },
+    55: { name: 'Balde com Água', top: [1, 5], plant: true, isTool: true }
 
 };
 

@@ -43,6 +43,62 @@ import { DroppedItem } from './entities/DroppedItem.js';
 
 export class MinecraftEngine {
 
+    // Adiciona um ponto de água na fila para ser processado
+    triggerWaterFlow(x, y, z, dist = 0) {
+        if (!this.waterQueue) this.waterQueue = [];
+        this.waterQueue.push({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), dist });
+    }
+
+    // Processa o escoamento da água em tempo real
+    updateWaterFlow(delta) {
+        if (!this.waterQueue || this.waterQueue.length === 0) return;
+
+        this.waterFlowTimer += delta;
+        if (this.waterFlowTimer < 0.12) return; 
+        this.waterFlowTimer = 0;
+
+        const currentBatch = [...this.waterQueue];
+        this.waterQueue = [];
+
+        const maxHorizontalSpread = 4;
+
+        for (let node of currentBatch) {
+            const { x, y, z, dist } = node;
+
+            // Se o bloco já não for água, cancela o fluxo
+            if (this.getBlock(x, y, z) !== BLOCKS.WATER) continue;
+
+            // 1. GRAVIDADE (Agora com o Z incluído!)
+            const blockBelow = this.getBlock(x, y - 1, z);
+            if (y > 1 && blockBelow === BLOCKS.AIR) {
+                this.setBlockModified(x, y - 1, z, BLOCKS.WATER);
+                this.rebuildChunkAtBlock(x, y - 1, z);
+                
+                // A água cai verticalmente (reinicia a distância horizontal)
+                this.waterQueue.push({ x, y: y - 1, z, dist: 0 });
+                continue; 
+            }
+
+            // 2. ESPALHAMENTO HORIZONTAL (Bateu no chão)
+            if (dist < maxHorizontalSpread && blockBelow !== BLOCKS.AIR && blockBelow !== BLOCKS.WATER) {
+                const neighbors = [
+                    { x: x + 1, y, z },
+                    { x: x - 1, y, z },
+                    { x, y, z: z + 1 },
+                    { x, y, z: z - 1 }
+                ];
+
+                for (let n of neighbors) {
+                    if (this.getBlock(n.x, n.y, n.z) === BLOCKS.AIR) {
+                        this.setBlockModified(n.x, n.y, n.z, BLOCKS.WATER);
+                        this.rebuildChunkAtBlock(n.x, n.y, n.z);
+                        this.waterQueue.push({ x: n.x, y: n.y, z: n.z, dist: dist + 1 });
+                    }
+                }
+            }
+        }
+    }
+
     generateRuinStructure(rx, ry, rz) {
 
         // Itens Raros dentro do Baú das Ruínas
@@ -112,23 +168,47 @@ export class MinecraftEngine {
         if (!this.furnaceData) return;
         if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
 
+        // Tabelas de receitas e combustíveis (carregadas dinamicamente a cada frame)
+        const smeltingRecipes = {
+            [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
+            [BLOCKS.GOLD_ORE]: { result: 56, cookTime: 8.0 },
+            [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
+            [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
+            [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
+            [BLOCKS.RAW_MEAT]: { result: BLOCKS.COOKED_MEAT, cookTime: 5.0 },
+            [BLOCKS.WOOD]: { result: BLOCKS.PLANK, count: 4, cookTime: 3.0 }
+        };
+
+        const fuelBurnTimes = {
+            [BLOCKS.COAL_ORE]: 80.0,
+            [BLOCKS.WOOD]: 15.0,
+            [BLOCKS.PLANK]: 10.0,
+            [BLOCKS.CRAFTING_TABLE]: 15.0,
+            [BLOCKS.CHEST]: 15.0,
+            [BLOCKS.DOOR]: 10.0
+        };
+
         for (let [key, furnace] of this.furnaceData.entries()) {
             const input = furnace.slots[0];
             const fuel = furnace.slots[1];
             const output = furnace.slots[2];
 
-            const recipe = input ? SMELTING_RECIPES[input.id] : null;
+            const recipe = input ? smeltingRecipes[input.id] : null;
 
-            // 1. Reduz o tempo de queima
+            // 1. Reduz o tempo de queima atual
             if (furnace.burnTime > 0) {
                 furnace.burnTime -= delta;
             }
 
             // 2. Consome novo combustível se o fogo apagar
             if (furnace.burnTime <= 0 && recipe) {
-                if (fuel && FUEL_BURN_TIMES[fuel.id] && (!output || (output.id === recipe.result && output.count < 64))) {
-                    furnace.burnTime = FUEL_BURN_TIMES[fuel.id];
-                    furnace.maxBurnTime = furnace.burnTime;
+                const burnTime = fuel ? (fuelBurnTimes[fuel.id] || 0) : 0;
+                const canOutput = !output || (output.id === recipe.result && output.count < 64);
+
+                if (burnTime > 0 && canOutput) {
+                    furnace.burnTime = burnTime;
+                    furnace.maxBurnTime = burnTime;
+
                     fuel.count--;
                     if (fuel.count <= 0) furnace.slots[1] = null;
                 }
@@ -136,26 +216,31 @@ export class MinecraftEngine {
 
             // 3. Avança o processo de cozimento
             if (furnace.burnTime > 0 && recipe) {
-                furnace.cookProgress += delta;
+                const canOutput = !output || (output.id === recipe.result && output.count < 64);
 
-                // Item finalizado
-                if (furnace.cookProgress >= recipe.cookTime) {
-                    furnace.cookProgress = 0;
+                if (canOutput) {
+                    furnace.cookProgress += delta;
 
-                    input.count--;
-                    if (input.count <= 0) furnace.slots[0] = null;
+                    // Item finalizado
+                    if (furnace.cookProgress >= recipe.cookTime) {
+                        furnace.cookProgress = 0;
 
-                    if (!furnace.slots[2]) {
-                        furnace.slots[2] = { id: recipe.result, count: recipe.count || 1 };
-                    } else {
-                        furnace.slots[2].count += (recipe.count || 1);
+                        input.count--;
+                        if (input.count <= 0) furnace.slots[0] = null;
+
+                        if (!furnace.slots[2]) {
+                            furnace.slots[2] = { id: recipe.result, count: recipe.count || 1 };
+                        } else {
+                            furnace.slots[2].count += (recipe.count || 1);
+                        }
                     }
+                } else {
+                    furnace.cookProgress = 0;
                 }
 
-                // --- EFEITOS VISUAIS EM TEMPO REAL ---
+                // --- EFEITOS VISUAIS ---
                 const [fx, fy, fz] = key.split(',').map(Number);
 
-                // Criar Luz de Fogo quentinha no bloco da fornalha
                 if (!this.placedFurnaceLights.has(key)) {
                     const fLight = new THREE.PointLight(0xff6600, 2.3, 14);
                     fLight.position.set(fx + 0.5, fy + 0.5, fz + 0.5);
@@ -163,7 +248,6 @@ export class MinecraftEngine {
                     this.placedFurnaceLights.set(key, fLight);
                 }
 
-                // Gerar Partículas de Fumo/Fagulhas
                 if (Math.random() < 0.35 && this.particleSystem) {
                     const pColor = Math.random() < 0.5 ? 0xff4500 : 0x555555;
                     this.particleSystem.createBlockBreakParticles(fx + 0.5, fy + 0.9, fz + 0.5, pColor);
@@ -173,7 +257,6 @@ export class MinecraftEngine {
                 // Arrefecimento quando apagada
                 furnace.cookProgress = Math.max(0, furnace.cookProgress - delta * 2);
 
-                // Remover a Luz quando a fornalha apaga
                 if (this.placedFurnaceLights.has(key)) {
                     this.scene.remove(this.placedFurnaceLights.get(key));
                     this.placedFurnaceLights.delete(key);
@@ -295,6 +378,10 @@ export class MinecraftEngine {
         this.isPaused = false;
         this.activeProfile = AppState.activeProfile;
         this.activeWorld = AppState.activeWorld;
+
+        // Sistema de simulação de fluidos
+        this.waterQueue = []; 
+        this.waterFlowTimer = 0;
 
         this.settings = SaveSystem.getSettings();
 
@@ -2744,6 +2831,18 @@ export class MinecraftEngine {
             this.miningCooldown = 0.20;
             this.miningTimer = 0;
             this.currentMiningKey = null;
+
+            // Se houver água ao lado do bloco destruído, a água começa a fluir para o espaço aberto
+            const adjacentCoords = [
+                [bx + 1, by, bz], [bx - 1, by, bz],
+                [bx, by + 1, bz], [bx, by - 1, bz],
+                [bx, by, bz + 1], [bx, by, bz - 1]
+            ];
+            for (let [ax, ay, az] of adjacentCoords) {
+                if (this.getBlock(ax, ay, az) === BLOCKS.WATER) {
+                    this.triggerWaterFlow(ax, ay, az, 0);
+                }
+            }
         }
     }
 
@@ -2890,8 +2989,10 @@ export class MinecraftEngine {
             this.setBlockModified(px, py, pz, BLOCKS.WATER);
             this.rebuildChunkAtBlock(px, py, pz);
 
+            // ACTIVAR A SIMULAÇÃO DE CASCATA
+            this.triggerWaterFlow(px, py, pz, 0);
+
             if (item.id === BLOCKS.WATER_BUCKET) {
-                // Devolve o balde vazio para a mão
                 this.hotbarSlots[this.selectedSlot] = { id: BLOCKS.BUCKET, count: 1 };
             } else {
                 item.count--;
@@ -3630,6 +3731,7 @@ export class MinecraftEngine {
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
+            this.updateWaterFlow(delta); // <-- ATIVA A FÍSICA DE FLUIDOS EM TEMPO REAL
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
