@@ -1082,9 +1082,19 @@ export class MinecraftEngine {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 500);
         this.scene.add(this.camera);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        // CONFIGURAÇÃO DE MÁXIMA QUALIDADE GRÁFICA
+        this.renderer = new THREE.WebGLRenderer({ 
+            antialias: false,                     // Suavização de bordas de alta qualidade
+            powerPreference: "high-performance", // Força o uso da GPU dedicada (NVIDIA/AMD)
+            precision: "highp",                  // Força máxima precisão nos cálculos de luz e shaders
+            stencil: true,                       // Habilita buffer de estêncil para efeitos complexos
+            depth: true                          // Habilita buffer de profundidade de alta precisão
+        });
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Renderiza na resolução nativa 100% real da tela (sem limitar a 2x)
+        this.renderer.setPixelRatio(window.devicePixelRatio);
 
         const brightFactor = (this.settings.brightness || 100) / 100;
         this.renderer.toneMappingExposure = brightFactor * 1.0;
