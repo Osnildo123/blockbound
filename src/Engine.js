@@ -2936,7 +2936,7 @@ export class MinecraftEngine {
             this.particleSystem.createBlockBreakParticles(bx + 0.5, by + 0.5, bz + 0.5, pColor);
 
             this.setBlockModified(bx, by, bz, BLOCKS.AIR);
-            this.sound.playBreak();
+            this.sound.playBreak(type); // Passa o tipo de bloco destruído
 
             let dropType = (type === BLOCKS.STONE) ? BLOCKS.COBBLE : type;
             this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, dropType, 1);
@@ -3349,7 +3349,7 @@ export class MinecraftEngine {
             }
 
             item.count--;
-            if (this.sound) this.sound.playPlace();
+            if (this.sound) this.sound.playPlace(item.id); // Passa o tipo de bloco colocado
             this.updateUI();
 
             this.rebuildChunkAtBlock(px, py, pz);
@@ -3785,7 +3785,13 @@ export class MinecraftEngine {
 
             this.stepCooldown -= delta;
             if (isWalking && this.isGrounded && this.stepCooldown <= 0) {
-                this.sound.playStep();
+                // Posição exata da sola dos pés (0.1 unidades abaixo da base do jogador)
+                const bx = Math.floor(this.position.x);
+                const by = Math.floor(this.position.y - 1.62 - 0.1);
+                const bz = Math.floor(this.position.z);
+
+                const blockUnderFeet = this.getBlock(bx, by, bz);
+                this.sound.playStep(blockUnderFeet);
                 this.stepCooldown = this.isSprinting ? 0.24 : 0.38;
             }
         }

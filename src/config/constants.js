@@ -307,6 +307,219 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
+// REDESENHA O TOPO DA GRAMA (Coluna 0, Linha 0) - BASEADO NA IMAGEM
+// ============================================================
+(function drawGrassTop() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 0 * tileSize;
+    const tileY = 0 * tileSize;
+
+    // Matriz 16x16 idêntica à imagem enviada
+    const pixels = [
+        "4213234123214534",
+        "3422312233242314",
+        "2341132332344312",
+        "3243321322345431",
+        "2234443244345321",
+        "3123212431443443",
+        "4321334322432211",
+        "3332145324443322",
+        "2444345433453133",
+        "2134334323422333",
+        "3331144334334312",
+        "2242233223244322",
+        "1343343133243233",
+        "2234442223343322",
+        "3423344324234433",
+        "3422233221343333"
+    ];
+
+    const palette = {
+        '1': '#355320', // Sombra profunda
+        '2': '#3e6326', // Verde escuro
+        '3': '#4d7c30', // Verde médio-escuro
+        '4': '#5c913b', // Verde tom base
+        '5': '#6aa244'  // Verde suave / brilho
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            ctx.fillStyle = palette[char] || palette['4'];
+            ctx.fillRect(tileX + c, tileY + r, 1, 1);
+        }
+    }
+})();
+
+// ============================================================
+// REDESENHA O LADO DA GRAMA (Coluna 1, Linha 0) - TERRA MENOS PIXELADA
+// ============================================================
+(function drawGrassSide() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 1 * tileSize;
+    const tileY = 0 * tileSize;
+
+    // Matriz 16x16: Grama no topo, terra mais "lisa" em blocos maiores e menos ruído
+    const pixels = [
+        "4323454323443234",
+        "3432314323143231",
+        "2343212343212343",
+        "321d432d314d321d",
+        "d32dd4dd3d4dd3dd",
+        "MMMMLMDMMMMLMHMd",
+        "dLMMMDPpMMMDMMLM",
+        "MDMMMMLMMDMMMLMD",
+        "LMHMDMMMMLMHMDMM",
+        "MDMMMLMPpDMMMLMH",
+        "dMLMMMDPdMMMDdMM",
+        "MMDDMMLMMMDDMLMD",
+        "LMHMPpMDDMMMMDdM",
+        "MDMMpdMMMMHMDMLM",
+        "dMLMHMDMMMLMHMDd",
+        "MMDDMMLMPpDDMMLM"
+    ];
+
+    const palette = {
+        // Relva (Mantém a textura verde musgo)
+        '1': '#355320', // Verde sombra
+        '2': '#3e6326', // Verde escuro
+        '3': '#4d7c30', // Verde médio
+        '4': '#5c913b', // Verde claro
+        '5': '#6aa244', // Verde brilho
+
+        // Terra (Cores originais aquecidas)
+        'D': '#3b2315', // Sombra escura da terra
+        'd': '#4d301d', // Terra escura
+        'M': '#644027', // Terra tom base (Blocos maiores, menos variação)
+        'L': '#7c5234', // Terra clara
+        'H': '#966543', // Brilho/Highlight da terra
+
+        // Pedrinhas (Pontuais, sem excesso)
+        'P': '#6e6e6e', // Cinza claro da pedra
+        'p': '#484848'  // Sombra da pedra
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// REDESENHA A CASCA DO TRONCO (Coluna 4, Linha 0) - BLOCOS QUADRADOS
+// ============================================================
+(function drawWoodSide() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 4 * tileSize;
+    const tileY = 0 * tileSize;
+
+    // Matriz 16x16: Padrão em blocos 2x2 para um visual mais quadrado e menos listrado
+    const pixels = [
+        "3341133441334133",
+        "3341133441334133",
+        "3113331133344133",
+        "3113331133344133",
+        "3334413341133311",
+        "3334413341133311",
+        "4113334113344133",
+        "4113334113344133",
+        "3331133344133411",
+        "3331133344133411",
+        "1133441333113334",
+        "1133441333113334",
+        "3441333113344133",
+        "3441333113344133",
+        "3333113344133411",
+        "3333113344133411"
+    ];
+
+    const palette = {
+        '1': '#3a2514', // Fissura da casca (Clareado em relação ao anterior #2a1a0e)
+        '3': '#5f4024', // Castanho médio base (Áreas lisas)
+        '4': '#7d5833'  // Castanho claro de madeira / Casca descascada
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            ctx.fillStyle = palette[char] || palette['3'];
+            ctx.fillRect(tileX + c, tileY + r, 1, 1);
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// REDESENHA O TOPO DO TRONCO (Coluna 5, Linha 0)
+// ============================================================
+(function drawWoodTop() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 5 * tileSize;
+    const tileY = 0 * tileSize;
+
+    // Anéis de crescimento interior com borda de casca
+    const pixels = [
+        "KKKKKKKKKKKKKKKK",
+        "KDDDDDDDDDDDDDDK",
+        "KDMMMMMMMMMMMMDK",
+        "KDMLLLLLLLLLLMDK",
+        "KDMLBBBBBBBBLMDK",
+        "KDMLBLLLLLLBLMDK",
+        "KDMLBLBBBBBLBLMDK",
+        "KDMLBLBBBBBLBLMDK",
+        "KDMLBLBBBBBLBLMDK",
+        "KDMLBLBBBBBLBLMDK",
+        "KDMLBLLLLLLBLMDK",
+        "KDMLBBBBBBBBLMDK",
+        "KDMLLLLLLLLLLMDK",
+        "KDMMMMMMMMMMMMDK",
+        "KDDDDDDDDDDDDDDK",
+        "KKKKKKKKKKKKKKKK"
+    ];
+
+    const palette = {
+        'K': '#33200d',
+        'D': '#4d3219',
+        'M': '#694828',
+        'L': '#91703e',
+        'B': '#b8945f'
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            ctx.fillStyle = palette[pixels[r][c]] || '#b8945f';
+            ctx.fillRect(tileX + c, tileY + r, 1, 1);
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
 // O GERADOR DE ÍCONES FICA NO FINAL DE TUDO!
 // ============================================================
 export const BLOCK_ICONS = {};
