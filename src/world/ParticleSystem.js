@@ -163,4 +163,42 @@ export class ParticleSystem {
             posAttr.needsUpdate = true;
         }
     }
+
+    createFootstepParticles(x, y, z, colorHex = 0x8b5a2b, isWater = false) {
+        const count = isWater ? 8 : 5;
+        const geo = new THREE.BufferGeometry();
+        const pos = new Float32Array(count * 3);
+        const vel = [];
+
+        for (let i = 0; i < count; i++) {
+            pos[i * 3] = x + (Math.random() - 0.5) * 0.4;
+            pos[i * 3 + 1] = y;
+            pos[i * 3 + 2] = z + (Math.random() - 0.5) * 0.4;
+
+            vel.push(new THREE.Vector3(
+                (Math.random() - 0.5) * (isWater ? 1.5 : 0.8),
+                Math.random() * (isWater ? 1.2 : 0.6) + 0.2,
+                (Math.random() - 0.5) * (isWater ? 1.5 : 0.8)
+            ));
+        }
+
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({
+            size: isWater ? 0.20 : 0.14,
+            color: isWater ? 0x38bdf8 : colorHex,
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.8
+        });
+
+        const pMesh = new THREE.Points(geo, mat);
+        this.scene.add(pMesh);
+
+        this.particles.push({
+            mesh: pMesh,
+            vel: vel,
+            life: 0.25,
+            maxLife: 0.25
+        });
+    }
 }

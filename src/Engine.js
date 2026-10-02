@@ -369,6 +369,7 @@ export class MinecraftEngine {
 
         this.noise = new SimplexNoise(seed);
 
+        // Limpa o mapa antigo do cliente
         for (let [key, group] of this.chunks.entries()) {
             this.scene.remove(group);
             group.traverse((child) => {
@@ -400,6 +401,22 @@ export class MinecraftEngine {
             });
         }
 
+        // 1. OTIMIZAÇÃO/FIX: Reseta os ponteiros de chunk do cliente para forçar o recarregamento
+        this.lastPlayerChunkX = null;
+        this.lastPlayerChunkZ = null;
+        this.chunkQueue = [];
+
+        // 2. FIX: Gera IMEDIATAMENTE os chunks 3x3 do ponto de spawn para o chão existir de imediato
+        const px = Math.floor(this.position.x / this.chunkSize);
+        const pz = Math.floor(this.position.z / this.chunkSize);
+        for (let x = -1; x <= 1; x++) {
+            for (let z = -1; z <= 1; z++) {
+                this.populateChunkData(px + x, pz + z);
+                this.generateChunk(px + x, pz + z);
+            }
+        }
+
+        // 3. Coloca os chunks restantes da visão na fila suave
         this.updateChunks();
         this.initClouds(seed);
         this.spawnFishes(seed);
@@ -415,6 +432,10 @@ export class MinecraftEngine {
         this.isPaused = false;
         this.activeProfile = AppState.activeProfile;
         this.activeWorld = AppState.activeWorld;
+        // --- OTIMIZAÇÃO DE CHUNKS & PERFORMANCE ---
+        this.chunkQueue = [];          // Fila de chunks pendentes para gerar
+        this.lastPlayerChunkX = null;  // Posição de chunk anterior
+        this.lastPlayerChunkZ = null;
 
         // Sistema de simulação de fluidos
         this.waterQueue = []; 
@@ -1554,7 +1575,9 @@ export class MinecraftEngine {
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
         if (isClientLAN) return;
 
-        const isNightTime = (this.dayTime >= 0.72 || this.dayTime < 0.22);
+        // O ciclo de noite ocorre entre 0.50 (Pôr do sol) e 0.98 (Amanhecer)
+        const isNightTime = (this.dayTime >= 0.50 && this.dayTime <= 0.98);
+
         if (isNightTime) {
             this.nightSpawnTimer -= delta;
             const hostileCount = this.mobs.filter(m => m.isHostile).length;
@@ -1564,7 +1587,8 @@ export class MinecraftEngine {
 
                 for (let attempt = 0; attempt < 10; attempt++) {
                     const angle = Math.random() * Math.PI * 2;
-                    const dist = 24 + Math.random() * 22;
+                    // Aumentada a distância de geração para 38 a 60 blocos de distância
+                    const dist = 38 + Math.random() * 22;
                     const rx = this.position.x + Math.sin(angle) * dist;
                     const rz = this.position.z + Math.cos(angle) * dist;
                     const ry = this.getHighestBlockY(rx, rz);
@@ -1572,12 +1596,12 @@ export class MinecraftEngine {
                     if (ry <= 11) continue;
 
                     const spawnVec = new THREE.Vector3(rx, ry + 1, rz);
-                    let tooCloseToAnyPlayer = spawnVec.distanceTo(this.position) < 22;
+                    let tooCloseToAnyPlayer = spawnVec.distanceTo(this.position) < 32;
 
                     if (!tooCloseToAnyPlayer && this.remotePlayers) {
                         for (let rp of this.remotePlayers.values()) {
                             const pPos = rp.targetPos || rp.group.position;
-                            if (pPos && spawnVec.distanceTo(pPos) < 22) {
+                            if (pPos && spawnVec.distanceTo(pPos) < 32) {
                                 tooCloseToAnyPlayer = true;
                                 break;
                             }
@@ -1592,6 +1616,32 @@ export class MinecraftEngine {
                         this.scene.add(mob.mesh);
                         this.notify(`⚠️ Inimigo noturno detetado ao longe: ${type.toUpperCase()}`);
                         break;
+                    }
+                }
+            }
+        } else {
+            // DURANTE O DIA: Os inimigos hostis queimam sob a luz do sol até serem eliminados
+            for (let i = this.mobs.length - 1; i >= 0; i--) {
+                const mob = this.mobs[i];
+                if (mob && mob.isHostile) {
+                    mob.sunBurnTimer = (mob.sunBurnTimer || 0) + delta;
+                    if (mob.sunBurnTimer >= 0.4) {
+                        mob.sunBurnTimer = 0;
+                        mob.hp -= 5; // Dano contínuo do sol
+
+                        // Efeito visual de fumo e combustão
+                        if (this.particleSystem && mob.mesh) {
+                            this.particleSystem.createBlockBreakParticles(
+                                mob.mesh.position.x,
+                                mob.mesh.position.y + 0.8,
+                                mob.mesh.position.z,
+                                0xff4500
+                            );
+                        }
+
+                        if (mob.hp <= 0) {
+                            mob.die();
+                        }
                     }
                 }
             }
@@ -2453,42 +2503,34 @@ export class MinecraftEngine {
                     if (this.worldData.has(blockKey)) continue;
 
                     // ============================================================
-                    // 1. MEGACAVERNAS E TÚNEIS COM LAGOS DE LAVA NO FUNDO
+                    // 1. CAVERNAS PEQUENAS E TÚNEIS OTIMIZADOS (SEM BURACOS GIGANTES)
                     // ============================================================
                     let isCave = false;
 
                     if (y < h - 4) {
-                        // Ruído 3D para salões gigantes abaixo do solo
-                        const megaCaveNoise = this.noise.noise3D 
-                            ? this.noise.noise3D(wx * 0.018, y * 0.022, wz * 0.018) 
-                            : this.noise.noise2D(wx * 0.018 + y * 0.02, wz * 0.018);
+                        // Túneis finos e localizados (escala ajustada para túneis estreitos)
+                        const scale = 0.055;
+                        const caveRegion = this.noise.noise2D(wx * 0.01, wz * 0.01);
+                        
+                        if (caveRegion > 0.38 && y <= 25) {
+                            const n1 = this.noise.noise3D 
+                                ? this.noise.noise3D(wx * scale, y * (scale * 1.5), wz * scale) 
+                                : this.noise.noise2D(wx * scale + y * 0.05, wz * scale + y * 0.05);
 
-                        if (megaCaveNoise > 0.35) {
-                            isCave = true;
-                        } else {
-                            // Túneis normais
-                            const scale = 0.038;
-                            const caveRegion = this.noise.noise2D(wx * 0.008, wz * 0.008);
-                            
-                            if (caveRegion > 0.32 && y <= 28) {
-                                const n1 = this.noise.noise3D 
-                                    ? this.noise.noise3D(wx * scale, y * (scale * 1.3), wz * scale) 
-                                    : this.noise.noise2D(wx * scale + y * 0.05, wz * scale + y * 0.05);
+                            const n2 = this.noise.noise3D 
+                                ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.5), (wz + 265.35) * scale) 
+                                : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
 
-                                const n2 = this.noise.noise3D 
-                                    ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.3), (wz + 265.35) * scale) 
-                                    : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
-
-                                if (Math.abs(n1) + Math.abs(n2) < 0.075) {
-                                    isCave = true;
-                                }
+                            // Threshold reduzido (0.045): gera túneis estreitos de 1 a 2 blocos de largura
+                            if (Math.abs(n1) + Math.abs(n2) < 0.045) {
+                                isCave = true;
                             }
                         }
                     }
 
                     if (isCave) {
-                        // Se estiver na base da caverna profunda (Y <= -38), preenche com LAVA!
-                        if (y <= -38) {
+                        // Pequenos lagos de lava apenas no fundo extremo (Y <= -42)
+                        if (y <= -42) {
                             this.worldData.set(blockKey, BLOCKS.LAVA);
                         } else {
                             this.worldData.set(blockKey, BLOCKS.AIR);
@@ -2795,21 +2837,48 @@ export class MinecraftEngine {
         const px = Math.floor(this.position.x / this.chunkSize);
         const pz = Math.floor(this.position.z / this.chunkSize);
 
-        for (let [key, group] of this.chunks.entries()) {
-            const [cx, cz] = key.split(',').map(Number);
-            if (Math.abs(cx - px) > this.renderDistance + 1 || Math.abs(cz - pz) > this.renderDistance + 1) {
-                this.scene.remove(group);
-                group.traverse((child) => {
-                    if (child.geometry) child.geometry.dispose();
-                });
-                this.chunks.delete(key);
+        // Só recalcula a lista de chunks se o jogador realmente mudou de chunk
+        if (this.lastPlayerChunkX !== px || this.lastPlayerChunkZ !== pz) {
+            this.lastPlayerChunkX = px;
+            this.lastPlayerChunkZ = pz;
+
+            // 1. Descarrega chunks fora do alcance
+            for (let [key, group] of this.chunks.entries()) {
+                const [cx, cz] = key.split(',').map(Number);
+                if (Math.abs(cx - px) > this.renderDistance + 1 || Math.abs(cz - pz) > this.renderDistance + 1) {
+                    this.scene.remove(group);
+                    group.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                    });
+                    this.chunks.delete(key);
+                }
             }
+
+            // 2. Adiciona novos chunks à fila de geração
+            this.chunkQueue = [];
+            for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
+                for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
+                    const cx = px + x;
+                    const cz = pz + z;
+                    const key = `${cx},${cz}`;
+                    if (!this.chunks.has(key)) {
+                        this.chunkQueue.push({ cx, cz });
+                    }
+                }
+            }
+
+            // Ordena a fila para gerar primeiro os chunks mais próximos do jogador
+            this.chunkQueue.sort((a, b) => {
+                const distA = Math.hypot(a.cx - px, a.cz - pz);
+                const distB = Math.hypot(b.cx - px, b.cz - pz);
+                return distA - distB;
+            });
         }
 
-        for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
-            for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
-                this.generateChunk(px + x, pz + z);
-            }
+        // Processa NO MÁXIMO 1 CHUNK por frame para manter cravado nos 60 FPS
+        if (this.chunkQueue.length > 0) {
+            const nextChunk = this.chunkQueue.shift();
+            this.generateChunk(nextChunk.cx, nextChunk.cz);
         }
     }
 
@@ -2818,6 +2887,7 @@ export class MinecraftEngine {
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
 
+            // 1. Jogadores Remotos
             const remotePlayerMeshes = [];
             for (let [id, rp] of this.remotePlayers.entries()) {
                 remotePlayerMeshes.push(rp.group);
@@ -2831,6 +2901,7 @@ export class MinecraftEngine {
                 }
             }
 
+            // 2. Mobs
             const mobMeshes = this.mobs.map(m => m.mesh).filter(m => m !== undefined);
             if (mobMeshes.length > 0) {
                 const mobHits = raycaster.intersectObjects(mobMeshes, true);
@@ -2845,22 +2916,36 @@ export class MinecraftEngine {
                 }
             }
 
+            // 3. OTIMIZAÇÃO: Apenas carrega as malhas dos 9 Chunks imediatamente ao redor do Jogador
+            const px = Math.floor(this.position.x / this.chunkSize);
+            const pz = Math.floor(this.position.z / this.chunkSize);
+
             const allMeshes = [];
-            for (let group of this.chunks.values()) {
-                group.children.forEach(child => {
-                    allMeshes.push(child);
-                });
-            }
-
-            for (let [key, doorObj] of this.doorMeshes.entries()) {
-                doorObj.group.traverse(child => {
-                    if (child.isMesh) {
-                        child.userData.doorKey = key;
-                        allMeshes.push(child);
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    const key = `${px + dx},${pz + dz}`;
+                    if (this.chunks.has(key)) {
+                        const group = this.chunks.get(key);
+                        group.children.forEach(child => allMeshes.push(child));
                     }
-                });
+                }
             }
 
+            // 4. OTIMIZAÇÃO: Filtra apenas as portas num raio próximo ao jogador (<= 8 blocos)
+            for (let [key, doorObj] of this.doorMeshes.entries()) {
+                const [dx, dy, dz] = key.split(',').map(Number);
+                const distSq = (dx - this.position.x) ** 2 + (dy - this.position.y) ** 2 + (dz - this.position.z) ** 2;
+                if (distSq <= 64.0) { 
+                    doorObj.group.traverse(child => {
+                        if (child.isMesh) {
+                            child.userData.doorKey = key;
+                            allMeshes.push(child);
+                        }
+                    });
+                }
+            }
+
+            // 5. Teste de Interseção do Raio
             const intersects = raycaster.intersectObjects(allMeshes, false);
 
             if (intersects.length > 0 && intersects[0].distance <= 5.5) {
@@ -3841,13 +3926,27 @@ export class MinecraftEngine {
 
             this.stepCooldown -= delta;
             if (isWalking && this.isGrounded && this.stepCooldown <= 0) {
-                // Posição exata da sola dos pés (0.1 unidades abaixo da base do jogador)
                 const bx = Math.floor(this.position.x);
                 const by = Math.floor(this.position.y - 1.62 - 0.1);
                 const bz = Math.floor(this.position.z);
 
                 const blockUnderFeet = this.getBlock(bx, by, bz);
                 this.sound.playStep(blockUnderFeet);
+
+                // Emissão de partículas nos pés
+                if (this.particleSystem) {
+                    const isWater = (blockUnderFeet === BLOCKS.WATER);
+                    const pColor = BLOCK_PARTICLE_COLORS[blockUnderFeet] || 0x866043;
+                    
+                    this.particleSystem.createFootstepParticles(
+                        this.position.x,
+                        this.position.y - 1.60,
+                        this.position.z,
+                        pColor,
+                        isWater
+                    );
+                }
+
                 this.stepCooldown = this.isSprinting ? 0.24 : 0.38;
             }
         }
