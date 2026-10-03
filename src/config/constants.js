@@ -17,7 +17,11 @@ export const BLOCKS = {
     BUCKET: 54,        // Balde Vazio
     WATER_BUCKET: 55,  // Balde com Água
     GOLD_INGOT: 56,    // Barra de Ouro
-    LAVA: 57           // Lava Incandescente
+    LAVA: 57,           // Lava Incandescente
+    IRON_HELMET: 58,
+    IRON_CHESTPLATE: 59,
+    IRON_LEGGINGS: 60,
+    IRON_BOOTS: 61
 };
 
 export const BLOCK_TILES = {
@@ -96,7 +100,11 @@ export const BLOCK_TILES = {
     54: { name: 'Balde', top: [0, 5], plant: true, isTool: true },
     55: { name: 'Balde com Água', top: [1, 5], plant: true, isTool: true },
     56: { name: 'Barra de Ouro', top: [6, 2], isTool: true },
-    57: { name: 'Lava', top: [2, 5], side: [2, 5], bottom: [2, 5], light: true, lava: true }
+    57: { name: 'Lava', top: [2, 5], side: [2, 5], bottom: [2, 5], light: true, lava: true },
+    58: { name: 'Capacete de Ferro', top: [4, 5], plant: true, isArmor: true, armorType: 'head', defense: 3 },
+    59: { name: 'Peitoral de Ferro', top: [5, 5], plant: true, isArmor: true, armorType: 'chest', defense: 8 },
+    60: { name: 'Calças de Ferro', top: [6, 5], plant: true, isArmor: true, armorType: 'legs', defense: 6 },
+    61: { name: 'Botas de Ferro', top: [7, 5], plant: true, isArmor: true, armorType: 'feet', defense: 3 }
 };
 
 export const BLOCK_PARTICLE_COLORS = {
@@ -597,6 +605,38 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
             }
         }
     }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
+// DESENHA ÍCONES DE ARMADURA NO ATLAS (Coluna 4 a 7, Linha 5)
+// ============================================================
+(function drawArmorIcons() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    const tileSize = 16;
+
+    // Capacete [4, 5]
+    const hX = 4 * tileSize, hY = 5 * tileSize;
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(hX + 3, hY + 3, 10, 8);
+    ctx.fillStyle = '#1e293b'; ctx.fillRect(hX + 4, hY + 7, 8, 2);
+
+    // Peitoral [5, 5]
+    const cX = 5 * tileSize, cY = 5 * tileSize;
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(cX + 3, cY + 3, 10, 10);
+    ctx.fillStyle = '#1e293b'; ctx.fillRect(cX + 6, cY + 3, 4, 3);
+
+    // Calças [6, 5]
+    const lX = 6 * tileSize, lY = 5 * tileSize;
+    ctx.fillStyle = '#cbd5e1'; ctx.fillRect(lX + 3, lY + 3, 10, 10);
+    ctx.clearRect(lX + 7, lY + 6, 2, 7);
+
+    // Botas [7, 5]
+    const bX = 7 * tileSize, bY = 5 * tileSize;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(bX + 3, bY + 6, 4, 7);
+    ctx.fillRect(bX + 9, bY + 6, 4, 7);
 
     if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
 })();

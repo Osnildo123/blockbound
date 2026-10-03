@@ -142,16 +142,30 @@
             <div class="gui-header">
                 <span>Inventário do Sobrevivente</span>
             </div>
-            <div class="crafting-panel">
-                <div style="font-size: 11px; font-weight: bold; color: #333;">Fabricação:</div>
-                <div class="crafting-grid-2x2">
-                    <div class="gui-slot" id="craft-0"></div>
-                    <div class="gui-slot" id="craft-1"></div>
-                    <div class="gui-slot" id="craft-2"></div>
-                    <div class="gui-slot" id="craft-3"></div>
+            <div style="display: flex; gap: 20px; align-items: center; justify-content: space-between;">
+                <!-- SLOTS DE ARMADURA -->
+                <div class="armor-panel" style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 10px; font-weight: bold; color: #333;">Armadura:</div>
+                    <div style="display: flex; gap: 4px;">
+                        <div class="gui-slot" id="armor-0" title="Capacete"></div>
+                        <div class="gui-slot" id="armor-1" title="Peitoral"></div>
+                        <div class="gui-slot" id="armor-2" title="Calças"></div>
+                        <div class="gui-slot" id="armor-3" title="Botas"></div>
+                    </div>
                 </div>
-                <div class="crafting-arrow">➔</div>
-                <div class="gui-slot" id="craft-result"></div>
+
+                <!-- PAINEL DE FABRICAÇÃO -->
+                <div class="crafting-panel">
+                    <div style="font-size: 11px; font-weight: bold; color: #333;">Fabricação:</div>
+                    <div class="crafting-grid-2x2">
+                        <div class="gui-slot" id="craft-0"></div>
+                        <div class="gui-slot" id="craft-1"></div>
+                        <div class="gui-slot" id="craft-2"></div>
+                        <div class="gui-slot" id="craft-3"></div>
+                    </div>
+                    <div class="crafting-arrow">➔</div>
+                    <div class="gui-slot" id="craft-result"></div>
+                </div>
             </div>
             <div style="font-size: 11px; font-weight: bold; color: #333; margin-top: 8px;">Mochila:</div>
             <div class="inv-grid" id="inv-grid"></div>

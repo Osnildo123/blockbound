@@ -1,7 +1,7 @@
 // Receitas da Fornalha (Ingrediente -> Resultado)
 const SMELTING_RECIPES = {
     [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
-    [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 }, // <-- CORRIGIDO AQUI
+    [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 },
     [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
     [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
     [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
@@ -43,13 +43,11 @@ import { DroppedItem } from './entities/DroppedItem.js';
 
 export class MinecraftEngine {
 
-    // Adiciona um ponto de água na fila para ser processado
     triggerWaterFlow(x, y, z, dist = 0) {
         if (!this.waterQueue) this.waterQueue = [];
         this.waterQueue.push({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), dist });
     }
 
-    // Marca apenas os chunks afetados para reconstrução única
     markChunkForRebuild(x, z, set) {
         const cx = Math.floor(x / this.chunkSize);
         const cz = Math.floor(z / this.chunkSize);
@@ -63,21 +61,42 @@ export class MinecraftEngine {
         if (localZ === 0) set.add(`${cx},${cz - 1}`);
         if (localZ === 15) set.add(`${cx},${cz + 1}`);
     }
+    
+    updatePlayerArmorVisuals(steveGroup, armorSlots) {
+        if (!steveGroup || !steveGroup.userData || !steveGroup.userData.armorMeshes) return;
+        const meshes = steveGroup.userData.armorMeshes;
+        if (!armorSlots) return;
 
-    // ALGORITMO DE FLUXO DE ÁGUA OTIMIZADO (SEM QUEDAS DE FPS)
+        const hasHelmet = !!(armorSlots[0] && armorSlots[0].count > 0);
+        const hasChest  = !!(armorSlots[1] && armorSlots[1].count > 0);
+        const hasLegs   = !!(armorSlots[2] && armorSlots[2].count > 0);
+        const hasBoots  = !!(armorSlots[3] && armorSlots[3].count > 0);
+
+        if (meshes.helmet) meshes.helmet.visible = hasHelmet;
+        if (meshes.chest) meshes.chest.forEach(m => m.visible = hasChest);
+        if (meshes.legs) meshes.legs.forEach(m => m.visible = hasLegs);
+        if (meshes.boots) meshes.boots.forEach(m => m.visible = hasBoots);
+    }
+
+    updateRemotePlayerArmor(peerId, armorSlots) {
+        if (this.remotePlayers && this.remotePlayers.has(peerId)) {
+            const rp = this.remotePlayers.get(peerId);
+            this.updatePlayerArmorVisuals(rp.group, armorSlots);
+        }
+    }
+
     updateWaterFlow(delta) {
         if (!this.waterQueue || this.waterQueue.length === 0) return;
 
         this.waterFlowTimer += delta;
-        if (this.waterFlowTimer < 0.08) return; // Ritmo suave
+        if (this.waterFlowTimer < 0.08) return;
         this.waterFlowTimer = 0;
 
-        // Limita a 10 blocos processados por tick para evitar picos de CPU/GPU
         const maxBatchSize = 10;
         const currentBatch = this.waterQueue.splice(0, maxBatchSize);
 
         const maxHorizontalSpread = 4;
-        const chunksToRebuild = new Set(); // Evita reconstruções duplicadas
+        const chunksToRebuild = new Set();
 
         for (let node of currentBatch) {
             const { x, y, z, dist } = node;
@@ -86,7 +105,6 @@ export class MinecraftEngine {
 
             const blockBelow = this.getBlock(x, y - 1, z);
 
-            // 1. GRAVIDADE
             if (y > 1 && blockBelow === BLOCKS.AIR) {
                 this.setBlockModified(x, y - 1, z, BLOCKS.WATER);
                 this.markChunkForRebuild(x, z, chunksToRebuild);
@@ -95,7 +113,6 @@ export class MinecraftEngine {
                 continue; 
             }
 
-            // 2. ESPALHAMENTO HORIZONTAL
             if (dist < maxHorizontalSpread && blockBelow !== BLOCKS.AIR && blockBelow !== BLOCKS.WATER) {
                 const neighbors = [
                     { x: x + 1, y, z },
@@ -114,7 +131,6 @@ export class MinecraftEngine {
             }
         }
 
-        // RECONSTRÓI CADA CHUNK AFETADO APENAS UMA ÚNICA VEZ
         for (let key of chunksToRebuild) {
             const [rcx, rcz] = key.split(',').map(Number);
             this.rebuildSingleChunk(rcx, rcz);
@@ -122,19 +138,16 @@ export class MinecraftEngine {
     }
 
     generateRuinStructure(rx, ry, rz) {
-
-        // Itens Raros dentro do Baú das Ruínas
+        const chestKey = `${rx},${ry + 1},${rz}`;
         if (!this.chestData.has(chestKey)) {
             const loot = Array(27).fill(null);
             loot[0] = { id: BLOCKS.IRON_INGOT, count: 3 + Math.floor(Math.random() * 5) };
             loot[1] = { id: BLOCKS.ELEMENTAL_CORE, count: 1 };
-            loot[2] = { id: BLOCKS.BUCKET, count: 1 }; // <-- BALDE ADICIONADO AQUI!
+            loot[2] = { id: BLOCKS.BUCKET, count: 1 };
             if (Math.random() < 0.5) loot[3] = { id: BLOCKS.SWORD, count: 1 };
             this.chestData.set(chestKey, loot);
         }
 
-
-        // Padrão de Ruína Metálica Pós-Apocalíptica (Bunker/Torre Caída 5x5)
         const ruinWidth = 5;
         const ruinHeight = 4;
 
@@ -143,14 +156,11 @@ export class MinecraftEngine {
                 const wx = rx + x;
                 const wz = rz + z;
 
-                // Fundação e Chão de Pedra/Ferro
                 this.worldData.set(`${wx},${ry},${wz}`, (Math.random() < 0.4) ? BLOCKS.IRON_ORE : BLOCKS.COBBLE);
 
-                // Paredes em Ruínas com Aberturas
                 for (let h = 1; h <= ruinHeight; h++) {
                     const blockKey = `${wx},${ry + h},${wz}`;
                     
-                    // Paredes externas (com falhas procedurais)
                     if (Math.abs(x) === 2 || Math.abs(z) === 2) {
                         const wallNoise = this.getSeededRandom(wx, ry + h, wz);
                         if (wallNoise > 0.35) {
@@ -160,18 +170,14 @@ export class MinecraftEngine {
                             this.worldData.set(blockKey, BLOCKS.AIR);
                         }
                     } else {
-                        // Interior Oco
                         this.worldData.set(blockKey, BLOCKS.AIR);
                     }
                 }
             }
         }
 
-        // Adiciona um Baú de Espólio no Centro da Ruína
-        const chestKey = `${rx},${ry + 1},${rz}`;
         this.worldData.set(chestKey, BLOCKS.CHEST);
         
-        // Itens Raros dentro do Baú das Ruínas
         if (!this.chestData.has(chestKey)) {
             const loot = Array(27).fill(null);
             loot[0] = { id: BLOCKS.IRON_INGOT, count: 3 + Math.floor(Math.random() * 5) };
@@ -181,20 +187,15 @@ export class MinecraftEngine {
             this.chestData.set(chestKey, loot);
         }
 
-        // Iluminação Futurista Ruída (Totem no canto)
         this.worldData.set(`${rx - 1},${ry + 1},${rz - 1}`, BLOCKS.TOTEM);
         this.applyBlockLight(rx - 1, ry + 1, rz - 1, BLOCKS.TOTEM);
     }
-
-    // ============================================================
-    // MÉTODOS DE RECEITAS E COMBUSTÍVEIS DA FORNALHA
-    // ============================================================
 
     getSmeltingRecipe(itemId) {
         if (!itemId) return null;
         const recipes = {
             [BLOCKS.IRON_ORE]: { result: BLOCKS.IRON_INGOT, cookTime: 8.0 },
-            [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 }, // <-- CORRIGIDO AQUI
+            [BLOCKS.GOLD_ORE]: { result: BLOCKS.GOLD_INGOT, cookTime: 8.0 },
             [BLOCKS.SAND]: { result: BLOCKS.GLASS, cookTime: 4.0 },
             [BLOCKS.COBBLE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
             [BLOCKS.STONE]: { result: BLOCKS.STONE, count: 1, cookTime: 3.5 },
@@ -217,10 +218,6 @@ export class MinecraftEngine {
         return fuels[itemId] || 0;
     }
 
-    // ============================================================
-    // LOOP PRINCIPAL DA FORNALHA
-    // ============================================================
-
     updateFurnaces(delta) {
         if (!this.furnaceData) return;
         if (!this.placedFurnaceLights) this.placedFurnaceLights = new Map();
@@ -232,12 +229,10 @@ export class MinecraftEngine {
 
             const recipe = input ? this.getSmeltingRecipe(input.id) : null;
 
-            // 1. Reduz o tempo de queima atual
             if (furnace.burnTime > 0) {
                 furnace.burnTime -= delta;
             }
 
-            // 2. Consome novo combustível se o fogo apagar
             if (furnace.burnTime <= 0 && recipe) {
                 const burnTime = fuel ? this.getFuelBurnTime(fuel.id) : 0;
                 const canOutput = !output || (output.id === recipe.result && output.count < 64);
@@ -251,14 +246,12 @@ export class MinecraftEngine {
                 }
             }
 
-            // 3. Avança o processo de cozimento
             if (furnace.burnTime > 0 && recipe) {
                 const canOutput = !output || (output.id === recipe.result && output.count < 64);
 
                 if (canOutput) {
                     furnace.cookProgress += delta;
 
-                    // Item finalizado
                     if (furnace.cookProgress >= recipe.cookTime) {
                         furnace.cookProgress = 0;
 
@@ -275,7 +268,6 @@ export class MinecraftEngine {
                     furnace.cookProgress = 0;
                 }
 
-                // --- EFEITOS VISUAIS ---
                 const [fx, fy, fz] = key.split(',').map(Number);
 
                 if (!this.placedFurnaceLights.has(key)) {
@@ -291,7 +283,6 @@ export class MinecraftEngine {
                 }
 
             } else {
-                // Arrefecimento quando apagada
                 furnace.cookProgress = Math.max(0, furnace.cookProgress - delta * 2);
 
                 if (this.placedFurnaceLights.has(key)) {
@@ -369,7 +360,6 @@ export class MinecraftEngine {
 
         this.noise = new SimplexNoise(seed);
 
-        // Limpa o mapa antigo do cliente
         for (let [key, group] of this.chunks.entries()) {
             this.scene.remove(group);
             group.traverse((child) => {
@@ -401,12 +391,10 @@ export class MinecraftEngine {
             });
         }
 
-        // 1. OTIMIZAÇÃO/FIX: Reseta os ponteiros de chunk do cliente para forçar o recarregamento
         this.lastPlayerChunkX = null;
         this.lastPlayerChunkZ = null;
         this.chunkQueue = [];
 
-        // 2. FIX: Gera IMEDIATAMENTE os chunks 3x3 do ponto de spawn para o chão existir de imediato
         const px = Math.floor(this.position.x / this.chunkSize);
         const pz = Math.floor(this.position.z / this.chunkSize);
         for (let x = -1; x <= 1; x++) {
@@ -416,7 +404,6 @@ export class MinecraftEngine {
             }
         }
 
-        // 3. Coloca os chunks restantes da visão na fila suave
         this.updateChunks();
         this.initClouds(seed);
         this.spawnFishes(seed);
@@ -432,12 +419,11 @@ export class MinecraftEngine {
         this.isPaused = false;
         this.activeProfile = AppState.activeProfile;
         this.activeWorld = AppState.activeWorld;
-        // --- OTIMIZAÇÃO DE CHUNKS & PERFORMANCE ---
-        this.chunkQueue = [];          // Fila de chunks pendentes para gerar
-        this.lastPlayerChunkX = null;  // Posição de chunk anterior
+
+        this.chunkQueue = [];
+        this.lastPlayerChunkX = null;
         this.lastPlayerChunkZ = null;
 
-        // Sistema de simulação de fluidos
         this.waterQueue = []; 
         this.waterFlowTimer = 0;
 
@@ -495,7 +481,7 @@ export class MinecraftEngine {
         this.hp = this.activeWorld ? (this.activeWorld.hp || 100) : 100;
         this.hunger = this.activeWorld ? (this.activeWorld.hunger || 100) : 100;
 
-        this.furnaceData = new Map(); // Guarda o estado (combustível, item, tempo) de cada fornalha no mundo
+        this.furnaceData = new Map();
         this.activeFurnaceKey = null;
 
         if (this.activeWorld && this.activeWorld.hotbar) {
@@ -514,6 +500,17 @@ export class MinecraftEngine {
                 { id: BLOCKS.COOKED_MEAT, count: 5 }
             ];
             this.inventorySlots = Array(27).fill(null);
+        }
+
+        if (this.activeWorld && this.activeWorld.armor) {
+            this.armorSlots = this.activeWorld.armor;
+        } else {
+            this.armorSlots = [
+                { id: BLOCKS.IRON_HELMET, count: 1 },
+                { id: BLOCKS.IRON_CHESTPLATE, count: 1 },
+                { id: BLOCKS.IRON_LEGGINGS, count: 1 },
+                { id: BLOCKS.IRON_BOOTS, count: 1 }
+            ];
         }
 
         this.craftingSlots = [null, null, null, null];
@@ -555,6 +552,7 @@ export class MinecraftEngine {
         if (!this.network.netConn) {
             this.spawnInitialMobs();
         }
+
         this.spawnFishes();
 
         for (let [key, type] of this.worldData.entries()) {
@@ -577,12 +575,26 @@ export class MinecraftEngine {
         this.lastDamageTime = agora;
 
         const isDrowning = sourceName.toLowerCase().includes('afogamento') || sourceName.toLowerCase().includes('água');
-        const finalDamage = isDrowning ? Math.max(damage, 15) : damage;
+
+        let totalDefense = 0;
+        if (!isDrowning && this.armorSlots) {
+            for (let i = 0; i < 4; i++) {
+                const item = this.armorSlots[i];
+                if (item && BLOCK_TILES[item.id] && BLOCK_TILES[item.id].defense) {
+                    totalDefense += BLOCK_TILES[item.id].defense;
+                }
+            }
+        }
+
+        const defensePercent = Math.min(0.80, totalDefense * 0.04);
+        const finalDamage = isDrowning ? Math.max(damage, 15) : Math.max(1, Math.round(damage * (1 - defensePercent)));
 
         this.hp = Math.max(0, this.hp - finalDamage);
         if (this.sound) this.sound.playBreak();
         if (typeof this.triggerDamageFlash === 'function') this.triggerDamageFlash();
-        this.notify(`💥 Dano de ${sourceName}! -${finalDamage} HP`);
+
+        const armorText = totalDefense > 0 ? ` (🛡️ -${Math.round(defensePercent * 100)}%)` : '';
+        this.notify(`💥 Dano de ${sourceName}! -${finalDamage} HP${armorText}`);
 
         if (knockbackDir && !isDrowning) {
             this.velocity.x += knockbackDir.x * 12.0;
@@ -592,7 +604,7 @@ export class MinecraftEngine {
         }
 
         if (this.hp <= 0) {
-            this.notify(`☠️ Foste morto por ${sourceName}! A reaparecer...`);
+            this.notify(`☠ Foste morto por ${sourceName}! A reaparecer...`);
             this.findSafeSpawn();
             this.hp = 100;
             this.hunger = 100;
@@ -791,6 +803,20 @@ export class MinecraftEngine {
         const pupilMat = new THREE.MeshStandardMaterial({ color: 0x4c3585, roughness: 0.8 });
         const mouthMat = new THREE.MeshStandardMaterial({ color: 0x6e3e2e, roughness: 0.8 });
 
+        // Materiais da Armadura (Ciano Diamante + Bordas Reforçadas)
+        const armorMat = new THREE.MeshStandardMaterial({ 
+            color: 0x38bdf8, 
+            roughness: 0.25, 
+            metalness: 0.2 
+        });
+        const armorDarkMat = new THREE.MeshStandardMaterial({
+            color: 0x0284c7,
+            roughness: 0.3
+        });
+
+        // ============================================================
+        // 1. CABEÇA E CAPACETE (DIMENSÕES EXPANDIDAS PARA COBRIR O CABELO)
+        // ============================================================
         const headGroup = new THREE.Group();
         headGroup.position.set(0, 1.72, 0);
 
@@ -833,8 +859,40 @@ export class MinecraftEngine {
         mouth.position.set(0, -0.13, 0.24);
         headGroup.add(mouth);
 
+        // --- CAPACETE EXPANDIDO PARA ELIMINAR CLIPPING ---
+        const helmetGroup = new THREE.Group();
+        
+        // Placa Superior (cobre o cabelo do topo)
+        const hTop = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.12, 0.56), armorMat);
+        hTop.position.set(0, 0.22, 0);
+        helmetGroup.add(hTop);
+
+        // Placa Traseira
+        const hBack = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.50, 0.10), armorMat);
+        hBack.position.set(0, -0.01, -0.23);
+        helmetGroup.add(hBack);
+
+        // Placas Laterais
+        const hSideL = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.50, 0.54), armorMat);
+        hSideL.position.set(-0.23, -0.01, 0);
+        const hSideR = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.50, 0.54), armorMat);
+        hSideR.position.set(0.23, -0.01, 0);
+        helmetGroup.add(hSideL, hSideR);
+
+        // Viseira Frontal e Nariz
+        const hBrow = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 0.10), armorMat);
+        hBrow.position.set(0, 0.15, 0.23);
+        const hNose = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.16, 0.10), armorDarkMat);
+        hNose.position.set(0, 0.02, 0.24);
+        helmetGroup.add(hBrow, hNose);
+
+        helmetGroup.visible = false;
+        headGroup.add(helmetGroup);
         steveGroup.add(headGroup);
 
+        // ============================================================
+        // 2. TORSO E PEITORAL (EXPANDIDO)
+        // ============================================================
         const torsoGroup = new THREE.Group();
         torsoGroup.position.set(0, 1.11, 0);
 
@@ -845,52 +903,98 @@ export class MinecraftEngine {
         neckCut.position.set(0, 0.28, 0.121);
         torsoGroup.add(neckCut);
 
+        const chestGroup = new THREE.Group();
+        const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.76, 0.32), armorMat);
+        const chestBelt = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, 0.34), armorDarkMat);
+        chestBelt.position.y = -0.31;
+        chestGroup.add(chestPlate, chestBelt);
+        chestGroup.visible = false;
+        torsoGroup.add(chestGroup);
+
         steveGroup.add(torsoGroup);
 
+        // ============================================================
+        // 3. BRAÇOS E OMBREIRAS ARTICULADAS (EXPANDIDAS)
+        // ============================================================
         const armGeoSleeve = new THREE.BoxGeometry(0.22, 0.24, 0.22);
         const armGeoSkin = new THREE.BoxGeometry(0.20, 0.48, 0.20);
 
+        // Braço Esquerdo
         const armLGroup = new THREE.Group();
         armLGroup.position.set(-0.36, 1.11, 0);
-        const sleeveL = new THREE.Mesh(armGeoSleeve, shirtMat);
-        sleeveL.position.y = 0.24;
-        const skinL = new THREE.Mesh(armGeoSkin, skinMat);
-        skinL.position.y = -0.12;
-        armLGroup.add(sleeveL);
-        armLGroup.add(skinL);
+        const sleeveL = new THREE.Mesh(armGeoSleeve, shirtMat); sleeveL.position.y = 0.24;
+        const skinL = new THREE.Mesh(armGeoSkin, skinMat); skinL.position.y = -0.12;
+        armLGroup.add(sleeveL, skinL);
+
+        const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.28), armorMat);
+        shoulderL.position.y = 0.18;
+        shoulderL.visible = false;
+        armLGroup.add(shoulderL);
         steveGroup.add(armLGroup);
 
+        // Braço Direito
         const armRGroup = new THREE.Group();
         armRGroup.position.set(0.36, 1.11, 0);
-        const sleeveR = new THREE.Mesh(armGeoSleeve, shirtMat);
-        sleeveR.position.y = 0.24;
-        const skinR = new THREE.Mesh(armGeoSkin, skinMat);
-        skinR.position.y = -0.12;
-        armRGroup.add(sleeveR);
-        armRGroup.add(skinR);
+        const sleeveR = new THREE.Mesh(armGeoSleeve, shirtMat); sleeveR.position.y = 0.24;
+        const skinR = new THREE.Mesh(armGeoSkin, skinMat); skinR.position.y = -0.12;
+        armRGroup.add(sleeveR, skinR);
+
+        const shoulderR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.28), armorMat);
+        shoulderR.position.y = 0.18;
+        shoulderR.visible = false;
+        armRGroup.add(shoulderR);
         steveGroup.add(armRGroup);
 
+        // ============================================================
+        // 4. PERNAS, CALÇAS E BOTAS (EXPANDIDAS)
+        // ============================================================
         const legPantsGeo = new THREE.BoxGeometry(0.22, 0.60, 0.22);
         const legShoeGeo = new THREE.BoxGeometry(0.23, 0.14, 0.23);
 
+        // Perna Esquerda
         const legLGroup = new THREE.Group();
         legLGroup.position.set(-0.12, 0.37, 0);
-        const pantsL = new THREE.Mesh(legPantsGeo, pantsMat);
-        pantsL.position.y = 0.07;
-        const shoeL = new THREE.Mesh(legShoeGeo, shoeMat);
-        shoeL.position.y = -0.30;
-        legLGroup.add(pantsL);
-        legLGroup.add(shoeL);
+        const pantsL = new THREE.Mesh(legPantsGeo, pantsMat); pantsL.position.y = 0.07;
+        const shoeL = new THREE.Mesh(legShoeGeo, shoeMat); shoeL.position.y = -0.30;
+        legLGroup.add(pantsL, shoeL);
+
+        const legLArmor = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.48, 0.27), armorMat);
+        legLArmor.position.y = 0.08;
+        legLArmor.visible = false;
+        legLGroup.add(legLArmor);
+
+        const bootLMesh = new THREE.Group();
+        const bBaseL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.29), armorMat);
+        bBaseL.position.y = -0.24;
+        const bRimL = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.08, 0.30), armorDarkMat);
+        bRimL.position.y = -0.13;
+        bootLMesh.add(bBaseL, bRimL);
+        bootLMesh.visible = false;
+        legLGroup.add(bootLMesh);
+
         steveGroup.add(legLGroup);
 
+        // Perna Direita
         const legRGroup = new THREE.Group();
         legRGroup.position.set(0.12, 0.37, 0);
-        const pantsR = new THREE.Mesh(legPantsGeo, pantsMat);
-        pantsR.position.y = 0.07;
-        const shoeR = new THREE.Mesh(legShoeGeo, shoeMat);
-        shoeR.position.y = -0.30;
-        legRGroup.add(pantsR);
-        legRGroup.add(shoeR);
+        const pantsR = new THREE.Mesh(legPantsGeo, pantsMat); pantsR.position.y = 0.07;
+        const shoeR = new THREE.Mesh(legShoeGeo, shoeMat); shoeR.position.y = -0.30;
+        legRGroup.add(pantsR, shoeR);
+
+        const legRArmor = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.48, 0.27), armorMat);
+        legRArmor.position.y = 0.08;
+        legRArmor.visible = false;
+        legRGroup.add(legRArmor);
+
+        const bootRMesh = new THREE.Group();
+        const bBaseR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.29), armorMat);
+        bBaseR.position.y = -0.24;
+        const bRimR = new THREE.Mesh(new THREE.BoxGeometry(0.29, 0.08, 0.30), armorDarkMat);
+        bRimR.position.y = -0.13;
+        bootRMesh.add(bBaseR, bRimR);
+        bootRMesh.visible = false;
+        legRGroup.add(bootRMesh);
+
         steveGroup.add(legRGroup);
 
         steveGroup.traverse(child => {
@@ -911,6 +1015,12 @@ export class MinecraftEngine {
                 armR: armRGroup,
                 legL: legLGroup,
                 legR: legRGroup
+            },
+            armorMeshes: {
+                helmet: helmetGroup,
+                chest: [chestGroup, shoulderL, shoulderR],
+                legs: [legLArmor, legRArmor],
+                boots: [bootLMesh, bootRMesh]
             },
             walkAnimTimer: 0
         };
@@ -941,15 +1051,23 @@ export class MinecraftEngine {
         const group = this.createSteveMesh(name, id);
         this.scene.add(group);
         this.remotePlayers.set(id, { group, targetPos: new THREE.Vector3(), rotY: 0, name: name });
+
+        if (this.network && this.armorSlots) {
+            this.network.sendArmorUpdate(this.armorSlots);
+        }
     }
 
-    updateRemotePlayer(id, x, y, z, rotY, name) {
+    updateRemotePlayer(id, x, y, z, rotY, name, armor = null) {
         if (!this.remotePlayers.has(id)) {
             this.spawnRemotePlayer(id, name || 'Outro Jogador');
         }
         const rp = this.remotePlayers.get(id);
         rp.targetPos.set(x, y - 1.62, z);
         rp.rotY = rotY; 
+        
+        if (armor && Array.isArray(armor)) {
+            this.updatePlayerArmorVisuals(rp.group, armor);
+        }
     }
 
     removeRemotePlayer(id) {
@@ -990,12 +1108,10 @@ export class MinecraftEngine {
         const types = ['clown', 'salmon', 'blue', 'cod', 'pufferfish', 'turtle'];
         const waterSpots = [];
 
-        // Procura por posições reais com água num raio expandido do mapa
         for (let attempt = 0; attempt < 600; attempt++) {
             const rx = Math.floor((random() - 0.5) * 240);
             const rz = Math.floor((random() - 0.5) * 240);
 
-            // Verifica o nível d'água (Y entre 5 e 10)
             for (let ry = 5; ry <= 10; ry++) {
                 if (this.getBlock(rx, ry, rz) === BLOCKS.WATER) {
                     waterSpots.push({ x: rx + 0.5, y: ry + 0.5, z: rz + 0.5 });
@@ -1003,11 +1119,9 @@ export class MinecraftEngine {
                 }
             }
 
-            // Para assim que encontrar 30 posições válidas em lagos
             if (waterSpots.length >= 30) break;
         }
 
-        // Spawna os peixes e tartarugas diretamente dentro da água dos lagos encontrados
         for (let i = 0; i < waterSpots.length; i++) {
             const pos = waterSpots[i];
             const type = types[Math.floor(random() * types.length)];
@@ -1049,6 +1163,8 @@ export class MinecraftEngine {
 
         const modifiedBlocksArr = Array.from(this.modifiedBlocks.entries());
         const chestsArr = Array.from(this.chestData.entries());
+        const furnacesArr = Array.from(this.furnaceData.entries());
+        const doorRotationsArr = window.DoorRotationMemory ? Array.from(window.DoorRotationMemory.entries()) : [];
 
         const savedData = {
             ...this.activeWorld,
@@ -1059,8 +1175,11 @@ export class MinecraftEngine {
             dayTime: this.dayTime,
             hotbar: this.hotbarSlots,
             inventory: this.inventorySlots,
+            armor: this.armorSlots,
             modifiedBlocks: modifiedBlocksArr,
-            chests: chestsArr
+            chests: chestsArr,
+            furnaces: furnacesArr,
+            doorRotations: doorRotationsArr
         };
 
         try {
@@ -1104,18 +1223,15 @@ export class MinecraftEngine {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 500);
         this.scene.add(this.camera);
 
-        // CONFIGURAÇÃO DE MÁXIMA QUALIDADE GRÁFICA
         this.renderer = new THREE.WebGLRenderer({ 
-            antialias: false,                     // Suavização de bordas de alta qualidade
-            powerPreference: "high-performance", // Força o uso da GPU dedicada (NVIDIA/AMD)
-            precision: "highp",                  // Força máxima precisão nos cálculos de luz e shaders
-            stencil: true,                       // Habilita buffer de estêncil para efeitos complexos
-            depth: true                          // Habilita buffer de profundidade de alta precisão
+            antialias: false,
+            powerPreference: "high-performance",
+            precision: "highp",
+            stencil: true,
+            depth: true
         });
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-
-        // Renderiza na resolução nativa 100% real da tela (sem limitar a 2x)
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
         const brightFactor = (this.settings.brightness || 100) / 100;
@@ -1270,9 +1386,6 @@ export class MinecraftEngine {
             vertexColors: true
         });
 
-        // ==========================================================
-        // SHADER: EFEITO DE CACHOEIRA (ÁGUA A DESCER)
-        // ==========================================================
         this.waterMaterial.onBeforeCompile = (shader) => {
             shader.uniforms.uTime = { value: 0 };
             this.waterShader = shader;
@@ -1290,7 +1403,6 @@ export class MinecraftEngine {
                     float tileY = floor(waterUv.y * 8.0);
                     float localV = fract(waterUv.y * 8.0);
                     
-                    // SINAL DE SOMA (+) FAZ A ÁGUA DESCER:
                     localV = fract(localV + (uTime * 1.5));
                     
                     waterUv.y = (tileY + localV) / 8.0;
@@ -1512,13 +1624,11 @@ export class MinecraftEngine {
         const wx = Math.floor(x);
         const wz = Math.floor(z);
 
-        // Procura a partir de Y = 45 (suficiente para o topo das árvores e colinas) até Y = -48
         for (let y = 45; y >= -48; y--) {
             const b = this.getBlock(wx, y, wz);
             if (b !== BLOCKS.AIR && b !== BLOCKS.WATER && !BLOCK_TILES[b]?.plant) return y;
         }
 
-        // Fallback baseado no ruído se o chunk ainda não estiver populado
         const elevNoise = this.noise.noise2D(wx * 0.015, wz * 0.015) * 12 +
                           this.noise.noise2D(wx * 0.04, wz * 0.04) * 4;
         return Math.floor(14 + elevNoise);
@@ -1575,7 +1685,6 @@ export class MinecraftEngine {
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
         if (isClientLAN) return;
 
-        // O ciclo de noite ocorre entre 0.50 (Pôr do sol) e 0.98 (Amanhecer)
         const isNightTime = (this.dayTime >= 0.50 && this.dayTime <= 0.98);
 
         if (isNightTime) {
@@ -1587,7 +1696,6 @@ export class MinecraftEngine {
 
                 for (let attempt = 0; attempt < 10; attempt++) {
                     const angle = Math.random() * Math.PI * 2;
-                    // Aumentada a distância de geração para 38 a 60 blocos de distância
                     const dist = 38 + Math.random() * 22;
                     const rx = this.position.x + Math.sin(angle) * dist;
                     const rz = this.position.z + Math.cos(angle) * dist;
@@ -1620,16 +1728,14 @@ export class MinecraftEngine {
                 }
             }
         } else {
-            // DURANTE O DIA: Os inimigos hostis queimam sob a luz do sol até serem eliminados
             for (let i = this.mobs.length - 1; i >= 0; i--) {
                 const mob = this.mobs[i];
                 if (mob && mob.isHostile) {
                     mob.sunBurnTimer = (mob.sunBurnTimer || 0) + delta;
                     if (mob.sunBurnTimer >= 0.4) {
                         mob.sunBurnTimer = 0;
-                        mob.hp -= 5; // Dano contínuo do sol
+                        mob.hp -= 5;
 
-                        // Efeito visual de fumo e combustão
                         if (this.particleSystem && mob.mesh) {
                             this.particleSystem.createBlockBreakParticles(
                                 mob.mesh.position.x,
@@ -1706,7 +1812,6 @@ export class MinecraftEngine {
                 return;
             }
 
-            // Permite fechar a Fornalha, Baú, Bancada ou Inventário pressionando ESC
             if (e.code === 'Escape') {
                 const furnaceEl = document.getElementById('furnace-screen');
                 const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
@@ -1767,12 +1872,12 @@ export class MinecraftEngine {
         });
 
         document.addEventListener('mousedown', (e) => {
-            const furnaceEl = document.getElementById('furnace-screen'); // <-- NOVA VARIÁVEL
+            const furnaceEl = document.getElementById('furnace-screen');
             
             const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                              document.getElementById('chest-screen').style.display === 'flex' || 
                              document.getElementById('crafting-table-screen').style.display === 'flex' || 
-                             (furnaceEl && furnaceEl.style.display === 'flex') || // <-- FORNALHA ADICIONADA AQUI
+                             (furnaceEl && furnaceEl.style.display === 'flex') ||
                              document.getElementById('start-screen').style.display !== 'none' ||
                              document.getElementById('pause-menu').style.display === 'flex' ||
                              (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
@@ -1808,7 +1913,6 @@ export class MinecraftEngine {
             }
         });
 
-        // <-- FORNALHA ADICIONADA NA LISTA ABAIXO PARA PODER ATIRAR ITENS FORA DA JANELA
         ['inventory-screen', 'chest-screen', 'crafting-table-screen', 'furnace-screen'].forEach(id => {
             const screenEl = document.getElementById(id);
             if (screenEl) {
@@ -1880,6 +1984,17 @@ export class MinecraftEngine {
         }
 
         for (let i = 0; i < 4; i++) {
+            const armorEl = document.getElementById(`armor-${i}`);
+            if (armorEl) {
+                armorEl.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.handleSlotClickUnified('armor', i, e.button === 2);
+                });
+                armorEl.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
+        }
+
+        for (let i = 0; i < 4; i++) {
             const craftEl = document.getElementById(`craft-${i}`);
             if (craftEl) {
                 craftEl.addEventListener('mousedown', (e) => {
@@ -1944,46 +2059,38 @@ export class MinecraftEngine {
             return;
         }
 
-        // DECLARAÇÃO DO IDS NO TOPO (Evita o ReferenceError)
         const ids = items.map(i => i.id);
 
-        // RECEITA 1: 1 Tronco de Madeira -> 4 Tábuas
         if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
             this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
             return;
         }
 
-        // RECEITA 2: 2 Tábuas -> 4 Tochas
         if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
             this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
             return;
         }
 
-        // RECEITA 3: 4 Tábuas -> Bancada de Trabalho
         if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
             this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
             return;
         }
 
-        // RECEITA 4: 4 Pedregulhos -> 4 Pedras Polidas
         if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
             this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
             return;
         }
 
-        // RECEITA 5: 8 Tábuas ao redor -> Baú
         if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
             this.craft3x3Result = { id: BLOCKS.CHEST, count: 1 };
             return;
         }
 
-        // RECEITA DA FORNALHA: 8 Pedregulhos ao redor -> 1 Fornalha
         if (items.length === 8 && ids.every(id => id === BLOCKS.COBBLE) && !this.crafting3x3Slots[4]) {
             this.craft3x3Result = { id: BLOCKS.FURNACE, count: 1 };
             return;
         }
 
-        // RECEITA 6: Picareta de Diamante
         if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
@@ -1993,7 +2100,6 @@ export class MinecraftEngine {
             return;
         }
 
-        // RECEITA 7: Espada de Diamante
         if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
             this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
@@ -2003,7 +2109,6 @@ export class MinecraftEngine {
 
         this.craft3x3Result = null;
 
-        // RECEITA: 3 Barras de Ferro -> 1 Balde
         if (items.length === 3 && ids.every(id => id === BLOCKS.IRON_INGOT)) {
             this.craft3x3Result = { id: BLOCKS.BUCKET, count: 1 };
             return;
@@ -2161,8 +2266,9 @@ export class MinecraftEngine {
     }
 
     getSourceList(type) {
+        if (type === 'armor') return this.armorSlots;
         if (type === 'chest') return this.chestData.get(this.activeChestKey);
-        if (type === 'furnace') return this.furnaceData.get(this.activeFurnaceKey)?.slots; // <-- OBRIGATÓRIO AQUI
+        if (type === 'furnace') return this.furnaceData.get(this.activeFurnaceKey)?.slots;
         if (type === 'hotbar') return this.hotbarSlots;
         if (type === 'inv') return this.inventorySlots;
         if (type === 'craft') return this.craftingSlots;
@@ -2175,8 +2281,16 @@ export class MinecraftEngine {
     }
 
     handleSlotClickUnified(listType, index, isRightClick = false) {
-        // Bloqueia a colocação de itens no slot de resultado da Fornalha (Slot 2)
         if (listType === 'furnace' && index === 2 && this.draggedSlot !== null) return;
+
+        if (listType === 'armor' && this.draggedSlot !== null) {
+            const heldId = this.draggedSlot.item.id;
+            const itemInfo = BLOCK_TILES[heldId];
+            const expectedType = ['head', 'chest', 'legs', 'feet'][index];
+            if (!itemInfo || !itemInfo.isArmor || itemInfo.armorType !== expectedType) {
+                return;
+            }
+        }
 
         const targetList = this.getSourceList(listType);
         if (!targetList) return;
@@ -2196,7 +2310,7 @@ export class MinecraftEngine {
                 }
 
                 if (floatItem) {
-                    floatItem.style.zIndex = "9999"; // Força a ficar na frente
+                    floatItem.style.zIndex = "9999";
                     floatItem.style.backgroundImage = `url(${BLOCK_ICONS[this.draggedSlot.item.id]})`;
                     floatItem.style.display = 'block';
                 }
@@ -2270,6 +2384,11 @@ export class MinecraftEngine {
         if (this.activeChestKey) this.updateChestUI();
         if (this.activeFurnaceKey) this.updateFurnaceUI();
         this.updateCraftingTableUI();
+
+        // SINCRONIZA A ARMADURA APÓS A TROCA DE ITENS NOS SLOTS
+        if (listType === 'armor' || this.draggedSlot?.type === 'armor') {
+            if (this.network) this.network.sendArmorUpdate(this.armorSlots);
+        }
     }
 
     selectSlot(idx) {
@@ -2281,7 +2400,7 @@ export class MinecraftEngine {
         const heartsEl = document.getElementById('hearts-display');
         if (heartsEl) {
             const heartsCount = Math.max(0, Math.ceil(this.hp / 10));
-            heartsEl.innerText = '❤️'.repeat(heartsCount);
+            heartsEl.innerText = '❤️️'.repeat(heartsCount);
         }
 
         const hungerEl = document.getElementById('hunger-display');
@@ -2369,6 +2488,23 @@ export class MinecraftEngine {
             }
         }
 
+        if (this.armorSlots) {
+            for (let i = 0; i < 4; i++) {
+                const slot = document.getElementById(`armor-${i}`);
+                if (!slot) continue;
+                const item = this.armorSlots[i];
+                const iconEl = slot.querySelector('.slot-icon');
+
+                if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
+                    if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                    else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
+                } else {
+                    if (iconEl) iconEl.style.backgroundImage = 'none';
+                    else slot.style.backgroundImage = 'none';
+                }
+            }
+        }
+
         const resSlot = document.getElementById('craft-result');
         if (resSlot) {
             if (this.craftResult && BLOCK_ICONS[this.craftResult.id]) {
@@ -2415,17 +2551,11 @@ export class MinecraftEngine {
         return 0.30;
     }
 
-    // ============================================================
-    // GERAÇÃO DA ÁRVORE CLÁSSICA (OAK CLASSIC)
-    // ============================================================
     generateTree(wx, y, wz) {
-        const height = 4 + Math.floor(this.getSeededRandom(wx, y, wz) * 2); // Tronco de 4 a 5 blocos
+        const height = 4 + Math.floor(this.getSeededRandom(wx, y, wz) * 2);
 
-        // 1. GERAR A COPA (FOLHAS) - Da base da copa até ao topo
         for (let dy = -3; dy <= 0; dy++) {
             const currentY = y + height + dy;
-            
-            // Raio: 2 blocos para as duas camadas inferiores, 1 bloco para as duas superiores
             const radius = (dy === 0 || dy === -1) ? 1 : 2;
 
             for (let lx = -radius; lx <= radius; lx++) {
@@ -2433,16 +2563,11 @@ export class MinecraftEngine {
                     const absX = Math.abs(lx);
                     const absZ = Math.abs(lz);
 
-                    // Cortar os cantos extremos para o formato orgânico de "cruz"
                     if (absX === radius && absZ === radius) {
-                        // Níveis de topo e base perdem sempre as quinas
                         if (dy === 0 || dy === -3) continue;
-                        
-                        // Níveis intermédios perdem as quinas aleatoriamente
                         if (this.getSeededRandom(wx + lx, currentY, wz + lz) > 0.5) continue;
                     }
 
-                    // Ignorar o centro inferior, que é reservado para o tronco
                     if (lx === 0 && lz === 0 && dy < 0) continue;
 
                     const leafKey = `${wx + lx},${currentY},${wz + lz}`;
@@ -2453,7 +2578,6 @@ export class MinecraftEngine {
             }
         }
 
-        // 2. GERAR O TRONCO (Substituindo o centro)
         for (let th = 0; th < height; th++) {
             this.worldData.set(`${wx},${y + th},${wz}`, BLOCKS.WOOD);
         }
@@ -2466,7 +2590,7 @@ export class MinecraftEngine {
 
         const size = this.chunkSize;
         const SEA_LEVEL = 11;
-        const MIN_Y = -48; // Profundidade otimizada para manter 60+ FPS
+        const MIN_Y = -48;
 
         for (let x = 0; x < size; x++) {
             for (let z = 0; z < size; z++) {
@@ -2493,7 +2617,6 @@ export class MinecraftEngine {
 
                 const h = baseLandHeight;
 
-                // Bedrock apenas na base inferior do mapa
                 this.worldData.set(`${wx},${MIN_Y},${wz}`, BLOCKS.BEDROCK);
 
                 const maxGenY = Math.max(h, SEA_LEVEL);
@@ -2502,13 +2625,9 @@ export class MinecraftEngine {
                     const blockKey = `${wx},${y},${wz}`;
                     if (this.worldData.has(blockKey)) continue;
 
-                    // ============================================================
-                    // 1. CAVERNAS PEQUENAS E TÚNEIS OTIMIZADOS (SEM BURACOS GIGANTES)
-                    // ============================================================
                     let isCave = false;
 
                     if (y < h - 4) {
-                        // Túneis finos e localizados (escala ajustada para túneis estreitos)
                         const scale = 0.055;
                         const caveRegion = this.noise.noise2D(wx * 0.01, wz * 0.01);
                         
@@ -2521,7 +2640,6 @@ export class MinecraftEngine {
                                 ? this.noise.noise3D((wx + 314.1) * scale, (y + 159.2) * (scale * 1.5), (wz + 265.35) * scale) 
                                 : this.noise.noise2D((wx + 314.1) * scale - y * 0.05, wz * scale + 100);
 
-                            // Threshold reduzido (0.045): gera túneis estreitos de 1 a 2 blocos de largura
                             if (Math.abs(n1) + Math.abs(n2) < 0.045) {
                                 isCave = true;
                             }
@@ -2529,7 +2647,6 @@ export class MinecraftEngine {
                     }
 
                     if (isCave) {
-                        // Pequenos lagos de lava apenas no fundo extremo (Y <= -42)
                         if (y <= -42) {
                             this.worldData.set(blockKey, BLOCKS.LAVA);
                         } else {
@@ -2538,9 +2655,6 @@ export class MinecraftEngine {
                         continue;
                     }
 
-                    // ============================================================
-                    // 2. TERRENO SÓLIDO E MINÉRIOS PROFUNDOS
-                    // ============================================================
                     if (y <= h) {
                         let type = BLOCKS.STONE;
 
@@ -2553,7 +2667,6 @@ export class MinecraftEngine {
                             else type = (h < SEA_LEVEL) ? BLOCKS.SAND : BLOCKS.DIRT;
                         }
 
-                        // Veios de Minérios Ricos nas Profundezas
                         if (type === BLOCKS.STONE && y < h - 2) {
                             const oreSeed = this.getSeededRandom(wx, y, wz);
                             const veinCluster = this.noise.noise2D(wx * 0.10, y * 0.10 + wz * 0.10);
@@ -2574,9 +2687,6 @@ export class MinecraftEngine {
                     }
                 }
 
-                // ============================================================
-                // 3. VEGETAÇÃO
-                // ============================================================
                 const distToSpawn = Math.sqrt(wx * wx + wz * wz);
                 if (h >= SEA_LEVEL && distToSpawn > 5.5 && !this.worldData.has(`${wx},${h+1},${wz}`)) {
                     if (isDesertBiome) {
@@ -2632,8 +2742,7 @@ export class MinecraftEngine {
                 const wx = cx * size + x;
                 const wz = cz * size + z;
 
-                    // Substitui a linha do loop de Y por esta:
-                    for (let y = -48; y <= 40; y++) {
+                for (let y = -48; y <= 40; y++) {
                     const type = this.getBlock(wx, y, wz);
                     if (type === BLOCKS.AIR || type === BLOCKS.DOOR) continue;
 
@@ -2697,15 +2806,12 @@ export class MinecraftEngine {
                                 targetCol.push(aoVal, aoVal, aoVal);
                             }
 
-                            // ============================================================
-                            // ATRIBUI A FACE FRONTAL DINÂMICA DA FORNALHA
-                            // ============================================================
                             let actualTileKey = f.tileKey;
                             if (type === BLOCKS.FURNACE) {
                                 const blockKey = `${wx},${y},${wz}`;
                                 const targetDir = (this.blockRotations && this.blockRotations.get(blockKey)) || [0, 0, 1];
 
-                                if (f.dir[1] === 0) { // Apenas faces laterais
+                                if (f.dir[1] === 0) {
                                     if (f.dir[0] === targetDir[0] && f.dir[2] === targetDir[2]) {
                                         actualTileKey = 'front';
                                     } else {
@@ -2837,12 +2943,10 @@ export class MinecraftEngine {
         const px = Math.floor(this.position.x / this.chunkSize);
         const pz = Math.floor(this.position.z / this.chunkSize);
 
-        // Só recalcula a lista de chunks se o jogador realmente mudou de chunk
         if (this.lastPlayerChunkX !== px || this.lastPlayerChunkZ !== pz) {
             this.lastPlayerChunkX = px;
             this.lastPlayerChunkZ = pz;
 
-            // 1. Descarrega chunks fora do alcance
             for (let [key, group] of this.chunks.entries()) {
                 const [cx, cz] = key.split(',').map(Number);
                 if (Math.abs(cx - px) > this.renderDistance + 1 || Math.abs(cz - pz) > this.renderDistance + 1) {
@@ -2854,7 +2958,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // 2. Adiciona novos chunks à fila de geração
             this.chunkQueue = [];
             for (let x = -this.renderDistance; x <= this.renderDistance; x++) {
                 for (let z = -this.renderDistance; z <= this.renderDistance; z++) {
@@ -2867,7 +2970,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // Ordena a fila para gerar primeiro os chunks mais próximos do jogador
             this.chunkQueue.sort((a, b) => {
                 const distA = Math.hypot(a.cx - px, a.cz - pz);
                 const distB = Math.hypot(b.cx - px, b.cz - pz);
@@ -2875,7 +2977,6 @@ export class MinecraftEngine {
             });
         }
 
-        // Processa NO MÁXIMO 1 CHUNK por frame para manter cravado nos 60 FPS
         if (this.chunkQueue.length > 0) {
             const nextChunk = this.chunkQueue.shift();
             this.generateChunk(nextChunk.cx, nextChunk.cz);
@@ -2887,7 +2988,6 @@ export class MinecraftEngine {
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
 
-            // 1. Jogadores Remotos
             const remotePlayerMeshes = [];
             for (let [id, rp] of this.remotePlayers.entries()) {
                 remotePlayerMeshes.push(rp.group);
@@ -2901,7 +3001,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // 2. Mobs
             const mobMeshes = this.mobs.map(m => m.mesh).filter(m => m !== undefined);
             if (mobMeshes.length > 0) {
                 const mobHits = raycaster.intersectObjects(mobMeshes, true);
@@ -2916,7 +3015,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // 3. OTIMIZAÇÃO: Apenas carrega as malhas dos 9 Chunks imediatamente ao redor do Jogador
             const px = Math.floor(this.position.x / this.chunkSize);
             const pz = Math.floor(this.position.z / this.chunkSize);
 
@@ -2931,7 +3029,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // 4. OTIMIZAÇÃO: Filtra apenas as portas num raio próximo ao jogador (<= 8 blocos)
             for (let [key, doorObj] of this.doorMeshes.entries()) {
                 const [dx, dy, dz] = key.split(',').map(Number);
                 const distSq = (dx - this.position.x) ** 2 + (dy - this.position.y) ** 2 + (dz - this.position.z) ** 2;
@@ -2945,7 +3042,6 @@ export class MinecraftEngine {
                 }
             }
 
-            // 5. Teste de Interseção do Raio
             const intersects = raycaster.intersectObjects(allMeshes, false);
 
             if (intersects.length > 0 && intersects[0].distance <= 5.5) {
@@ -2983,15 +3079,9 @@ export class MinecraftEngine {
         return null;
     }
 
-    // ============================================================
-    // OTIMIZAÇÃO DE BLOCOS RECEBIDOS PELA REDE (CLIENTE LAN)
-    // ============================================================
-
     applyRemoteBlock(x, y, z, blockType, rotY = null) {
         this.setBlockModified(x, y, z, blockType, rotY, true);
 
-        // Em vez de reconstruir o chunk imediatamente para cada pacote de rede,
-        // marca o chunk na fila para reconstruir uma única vez no final do frame
         if (!this.pendingRemoteChunks) this.pendingRemoteChunks = new Set();
         this.markChunkForRebuild(x, z, this.pendingRemoteChunks);
 
@@ -3008,14 +3098,11 @@ export class MinecraftEngine {
         }
     }
 
-    // Sincroniza o estado da fornalha recebido via rede (Host/Cliente)
     applyRemoteFurnaceUpdate(furnaceKey, furnaceState) {
         if (!this.furnaceData) this.furnaceData = new Map();
         
-        // Atualiza os slots e o tempo de queima com os dados remotos
         this.furnaceData.set(furnaceKey, furnaceState);
 
-        // Se o jogador estiver com a janela desta fornalha aberta, atualiza a interface gráfica
         if (this.activeFurnaceKey === furnaceKey) {
             this.updateFurnaceUI();
         }
@@ -3040,7 +3127,6 @@ export class MinecraftEngine {
                 this.removeDoorMesh(bx, by, bz);
             }
 
-            // [NOVO] Se destruir uma Fornalha ou Baú, dropa todos os itens guardados no chão
             const key = `${bx},${by},${bz}`;
             if (type === BLOCKS.FURNACE && this.furnaceData.has(key)) {
                 const fData = this.furnaceData.get(key);
@@ -3066,7 +3152,7 @@ export class MinecraftEngine {
             this.particleSystem.createBlockBreakParticles(bx + 0.5, by + 0.5, bz + 0.5, pColor);
 
             this.setBlockModified(bx, by, bz, BLOCKS.AIR);
-            this.sound.playBreak(type); // Passa o tipo de bloco destruído
+            this.sound.playBreak(type);
 
             let dropType = (type === BLOCKS.STONE) ? BLOCKS.COBBLE : type;
             this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, dropType, 1);
@@ -3077,7 +3163,6 @@ export class MinecraftEngine {
             this.miningTimer = 0;
             this.currentMiningKey = null;
 
-            // Se houver água ao lado do bloco destruído, a água começa a fluir para o espaço aberto
             const adjacentCoords = [
                 [bx + 1, by, bz], [bx - 1, by, bz],
                 [bx, by + 1, bz], [bx, by - 1, bz],
@@ -3126,7 +3211,7 @@ export class MinecraftEngine {
                 const damage = (item && BLOCK_TILES[item.id]?.toolType === 'sword') ? BLOCK_TILES[item.id].toolDamage : 2;
                 this.network.sendHitMob(target.mob.id, damage);
                 if (item && BLOCK_TILES[item.id]?.toolType === 'sword') {
-                    this.notify("⚔️ Ataque crítico com a Espada!");
+                    this.notify("⚔️️ Ataque crítico com a Espada!");
                 }
                 return;
             }
@@ -3184,7 +3269,6 @@ export class MinecraftEngine {
         const item = this.hotbarSlots[this.selectedSlot];
         const target = this.getTargetBlock();
 
-        // 1. Comida
         if (item && BLOCK_TILES[item.id]?.food) {
             const info = BLOCK_TILES[item.id];
             this.hunger = Math.min(100, this.hunger + info.healHunger);
@@ -3197,21 +3281,14 @@ export class MinecraftEngine {
             return;
         }
 
-        // ============================================================
-        // SISTEMA DE BALDE: RECOLHER E DESPEJAR ÁGUA
-        // ============================================================
-        
-        // A) RECOLHER ÁGUA COM BALDE VAZIO
         if (item && item.id === BLOCKS.BUCKET && target && target.breakPos) {
             const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
             const targetType = this.getBlock(bx, by, bz);
 
             if (targetType === BLOCKS.WATER) {
-                // Remove o bloco de água do mapa
                 this.setBlockModified(bx, by, bz, BLOCKS.AIR);
                 this.rebuildChunkAtBlock(bx, by, bz);
 
-                // Transforma 1 balde vazio em Balde com Água
                 item.count--;
                 if (item.count <= 0) {
                     this.hotbarSlots[this.selectedSlot] = { id: BLOCKS.WATER_BUCKET, count: 1 };
@@ -3226,15 +3303,12 @@ export class MinecraftEngine {
             }
         }
 
-        // B) DESPEJAR ÁGUA COM BALDE CHEIO (OU COM O PRÓPRIO BLOCO DE ÁGUA)
         if (item && (item.id === BLOCKS.WATER_BUCKET || item.id === BLOCKS.WATER) && target && target.placePos) {
             const px = target.placePos.x, py = target.placePos.y, pz = target.placePos.z;
 
-            // Coloca o bloco de água no mapa
             this.setBlockModified(px, py, pz, BLOCKS.WATER);
             this.rebuildChunkAtBlock(px, py, pz);
 
-            // ACTIVAR A SIMULAÇÃO DE CASCATA
             this.triggerWaterFlow(px, py, pz, 0);
 
             if (item.id === BLOCKS.WATER_BUCKET) {
@@ -3250,7 +3324,6 @@ export class MinecraftEngine {
             return;
         }
 
-        // 2. Interação com Portas
         if (target && target.isDoor) {
             if (this.doorMeshes.has(target.doorKey)) {
                 const d = this.doorMeshes.get(target.doorKey);
@@ -3265,7 +3338,6 @@ export class MinecraftEngine {
             return;
         }
 
-        // 3. Interação com Blocos Funcionais (Fornalha, Baú, Fogueira, etc.)
         if (target && target.breakPos) {
             const bx = target.breakPos.x, by = target.breakPos.y, bz = target.breakPos.z;
             const targetType = this.getBlock(bx, by, bz);
@@ -3306,7 +3378,6 @@ export class MinecraftEngine {
             }
         }
 
-        // 4. Colocar o Bloco normal no Mundo
         this.placeBlock();
     }
 
@@ -3460,9 +3531,6 @@ export class MinecraftEngine {
 
             this.setBlockModified(px, py, pz, item.id);
 
-            // ============================================================
-            // CALCULA A ORIENTAÇÃO DA FORNALHA VIRADA PARA O JOGADOR
-            // ============================================================
             if (item.id === BLOCKS.FURNACE) {
                 const dx = this.position.x - (px + 0.5);
                 const dz = this.position.z - (pz + 0.5);
@@ -3508,7 +3576,6 @@ export class MinecraftEngine {
         if (target && target.breakPos) {
             const type = this.getBlock(target.breakPos.x, target.breakPos.y, target.breakPos.z);
             if (type !== BLOCKS.AIR) {
-                // Se focar na água, dá um Balde de Água ou o bloco de Água
                 const pickedId = (type === BLOCKS.WATER) ? BLOCKS.WATER_BUCKET : type;
                 this.hotbarSlots[this.selectedSlot] = { id: pickedId, count: 64 };
                 this.updateUI();
@@ -3604,10 +3671,6 @@ export class MinecraftEngine {
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
 
         if (!isClientLAN) {
-            // REDUZA ESTE VALOR PARA O TEMPO PASSAR MAIS DEVAGAR:
-            // 0.0015 = ~11 minutos por dia (Atual)
-            // 0.0008 = ~21 minutos por dia (Padrão do Minecraft clássico)
-            // 0.0005 = ~33 minutos por dia
             this.dayTime += delta * 0.0008; 
 
             if (this.dayTime > 1.0) {
@@ -3617,8 +3680,6 @@ export class MinecraftEngine {
                     this.seasonIndex = (this.seasonIndex + 1) % 4;
                 }
             }
-
-            // ... (resto do código do método updateDayNight)
 
             const season = this.seasons[this.seasonIndex];
             if (season === 'Inverno') {
@@ -3710,12 +3771,10 @@ export class MinecraftEngine {
         const isGuiOpen = document.getElementById('inventory-screen').style.display === 'flex' || 
                          document.getElementById('chest-screen').style.display === 'flex' || 
                          document.getElementById('crafting-table-screen').style.display === 'flex' || 
-                         (furnaceEl && furnaceEl.style.display === 'flex') || // <--- ADICIONA ISTO
+                         (furnaceEl && furnaceEl.style.display === 'flex') ||
                          document.getElementById('start-screen').style.display !== 'none' ||
                          document.getElementById('pause-menu').style.display === 'flex' ||
                          (document.getElementById('chat-input') && document.getElementById('chat-input').style.display === 'block');
-                         
-// ... o resto do código da física continua normal ...
 
         if (isNaN(this.position.x) || isNaN(this.position.y) || isNaN(this.position.z)) {
             this.findSafeSpawn();
@@ -3933,7 +3992,6 @@ export class MinecraftEngine {
                 const blockUnderFeet = this.getBlock(bx, by, bz);
                 this.sound.playStep(blockUnderFeet);
 
-                // Emissão de partículas nos pés
                 if (this.particleSystem) {
                     const isWater = (blockUnderFeet === BLOCKS.WATER);
                     const pColor = BLOCK_PARTICLE_COLORS[blockUnderFeet] || 0x866043;
@@ -3991,7 +4049,6 @@ export class MinecraftEngine {
         const delta = Math.min((timestamp - (this.lastTime || timestamp)) / 1000, 0.1);
         this.lastTime = timestamp;
 
-        // --- ATUALIZA A ANIMAÇÃO DA ÁGUA NA PLACA DE VÍDEO ---
         this.waterTime = (this.waterTime || 0) + delta;
         if (this.waterShader) {
             this.waterShader.uniforms.uTime.value = this.waterTime;
@@ -4014,7 +4071,7 @@ export class MinecraftEngine {
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
             this.updateWaterFlow(delta);
-            this.processPendingRemoteRebuilds(); // <-- ATUALIZA OS CHUNKS DO CLIENTE DE FORMA AGRUPADA
+            this.processPendingRemoteRebuilds();
 
             if (this.doorMeshes) {
                 for (let d of this.doorMeshes.values()) {
@@ -4121,7 +4178,6 @@ export class MinecraftEngine {
 
         screen = document.createElement('div');
         screen.id = 'furnace-screen';
-        // Usamos position: fixed e 100vw/100vh para centralizar perfeitamente no navegador
         screen.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0,0,0,0.75); display: flex; justify-content: center;
@@ -4150,7 +4206,6 @@ export class MinecraftEngine {
             </div>
         `;
         
-        // Anexa diretamente ao document.body para garantir centralização total
         document.body.appendChild(screen);
 
         screen.addEventListener('click', (e) => {
@@ -4196,7 +4251,6 @@ export class MinecraftEngine {
 
         const furnace = this.furnaceData.get(this.activeFurnaceKey);
 
-        // Atualiza os 3 slots da fornalha
         for (let i = 0; i < 3; i++) {
             const slot = document.getElementById(`furnace-slot-${i}`);
             if (!slot) continue;
@@ -4213,13 +4267,11 @@ export class MinecraftEngine {
             }
         }
 
-        // Indicador de chama acesa / apagada
         const flameEl = document.getElementById('furnace-flame');
         if (flameEl) {
             flameEl.style.opacity = furnace.burnTime > 0 ? '1.0' : '0.2';
         }
 
-        // Indicador de seta de progresso
         const progressEl = document.getElementById('furnace-progress');
         if (progressEl) {
             const input = furnace.slots[0];
@@ -4234,7 +4286,6 @@ export class MinecraftEngine {
             }
         }
 
-        // Atualiza o inventário inferior
         for (let i = 0; i < 27; i++) {
             const slot = document.getElementById(`furnace-inv-${i}`);
             if (!slot) continue;
@@ -4251,7 +4302,6 @@ export class MinecraftEngine {
             }
         }
 
-        // Atualiza a hotbar inferior na janela da fornalha
         for (let i = 0; i < 9; i++) {
             const slot = document.getElementById(`furnace-hotbar-${i}`);
             if (!slot) continue;

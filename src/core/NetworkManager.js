@@ -104,9 +104,6 @@ export class NetworkManager {
                         ? this.game.activeWorld.seed 
                         : 12345;
 
-                    console.log("📤 Host enviando Seed do mundo e Portas ao cliente autenticado:", seedToSend);
-
-                    // 1. Extrai o estado e rotação de todas as portas ativas no Host
                     let doorsData = [];
                     if (typeof this.game.exportDoorsForNewPlayer === 'function') {
                         doorsData = this.game.exportDoorsForNewPlayer();
@@ -123,7 +120,6 @@ export class NetworkManager {
                         }
                     }
 
-                    // 2. Envia a Seed, blocos e o pacote de portas para o jogador que acabou de entrar
                     this.netConn.send({
                         type: 'WORLD_INIT',
                         seed: seedToSend,
@@ -153,8 +149,6 @@ export class NetworkManager {
             });
         }
         else if (data.type === 'WORLD_INIT') {
-            console.log("🌎 Recebida Seed idêntica do Host:", data.seed);
-
             const startScreen = document.getElementById('start-screen');
             if (startScreen) startScreen.style.display = 'none';
 
@@ -164,7 +158,6 @@ export class NetworkManager {
             const dialogModal = document.getElementById('dialog-modal');
             if (dialogModal) dialogModal.style.display = 'none';
 
-            // 1. Alimenta a memória global de rotações do cliente antes de carregar o mapa
             if (data.doors && Array.isArray(data.doors)) {
                 if (!window.DoorRotationMemory) window.DoorRotationMemory = new Map();
                 data.doors.forEach(door => {
@@ -173,12 +166,10 @@ export class NetworkManager {
                 });
             }
 
-            // 2. Carrega o mundo vindo do Host
             if (typeof this.game.loadHostWorld === 'function') {
                 this.game.loadHostWorld(data.seed, data.modifiedBlocks);
             }
 
-            // 3. Renderiza as portas 3D no cliente recém-chegado com rotação e estado exatos
             if (data.doors && Array.isArray(data.doors)) {
                 if (typeof this.game.importDoorsFromHost === 'function') {
                     this.game.importDoorsFromHost(data.doors);
@@ -196,22 +187,18 @@ export class NetworkManager {
         }
         else if (data.type === 'POS') {
             if (typeof this.game.updateRemotePlayer === 'function') {
-                this.game.updateRemotePlayer(data.id, data.x, data.y, data.z, data.rotY, data.name);
+                this.game.updateRemotePlayer(data.id, data.x, data.y, data.z, data.rotY, data.name, data.armor);
             }
         } 
         else if (data.type === 'BLOCK') {
             const key = `${data.x},${data.y},${data.z}`;
-
-            // VERIFICAÇÃO INFALÍVEL NA RECEÇÃO
             const isDoor = (data.blockType === 8 || (typeof BLOCKS !== 'undefined' && data.blockType === BLOCKS.DOOR));
 
-            // 1. Guarda a rotação na memória do receptor se for porta
             if (isDoor && data.rotY !== null && data.rotY !== undefined) {
                 if (!window.DoorRotationMemory) window.DoorRotationMemory = new Map();
                 window.DoorRotationMemory.set(key, data.rotY);
             }
 
-            // 2. Aplica o bloco na estrutura física/dados do mapa
             if (typeof this.game.applyRemoteBlock === 'function') {
                 this.game.applyRemoteBlock(data.x, data.y, data.z, data.blockType, data.rotY);
             } else {
@@ -223,15 +210,14 @@ export class NetworkManager {
                 }
             }
 
-            // 3. Força a criação/remoção imediata do modelo 3D da porta
-            if (data.blockType === 0) { // Se for destruição (AR)
+            if (data.blockType === 0) {
                 if (this.game.doorMeshes && this.game.doorMeshes.has(key)) {
                     const doorData = this.game.doorMeshes.get(key);
                     if (doorData.mesh) this.game.scene.remove(doorData.mesh);
                     if (doorData.group) this.game.scene.remove(doorData.group);
                     this.game.doorMeshes.delete(key);
                 }
-            } else if (isDoor && data.rotY !== null && data.rotY !== undefined) { // Se for criação de porta
+            } else if (isDoor && data.rotY !== null && data.rotY !== undefined) {
                 if (typeof this.game.createDoorMesh === 'function') {
                     if (this.game.doorMeshes && this.game.doorMeshes.has(key)) {
                         const oldDoor = this.game.doorMeshes.get(key);
@@ -283,10 +269,14 @@ export class NetworkManager {
             this.game.seasonIndex = data.seasonIndex;
             this.game.currentWeather = data.currentWeather;
         }
-
         else if (data.type === 'FURNACE_UPDATE') {
             if (typeof this.game.applyRemoteFurnaceUpdate === 'function') {
                 this.game.applyRemoteFurnaceUpdate(data.furnaceKey, data.furnaceData);
+            }
+        }
+        else if (data.type === 'ARMOR_UPDATE') {
+            if (typeof this.game.updateRemotePlayerArmor === 'function') {
+                this.game.updateRemotePlayerArmor(data.id, data.armor);
             }
         }
     }
@@ -316,7 +306,8 @@ export class NetworkManager {
                 type: 'POS',
                 id: this.myPeerId,
                 name: this.game.activeProfile ? this.game.activeProfile.name : 'Jogador',
-                x, y, z, rotY
+                x, y, z, rotY,
+                armor: this.game.armorSlots || null
             });
         }
     }
@@ -376,6 +367,12 @@ export class NetworkManager {
     sendFurnaceUpdate(furnaceKey, furnaceData) {
         if (this.netConn && this.netConn.open) {
             this.netConn.send({ type: 'FURNACE_UPDATE', furnaceKey, furnaceData });
+        }
+    }
+
+    sendArmorUpdate(armorSlots) {
+        if (this.netConn && this.netConn.open) {
+            this.netConn.send({ type: 'ARMOR_UPDATE', id: this.myPeerId, armor: armorSlots });
         }
     }
 
