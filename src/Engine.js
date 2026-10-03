@@ -1366,14 +1366,46 @@ export class MinecraftEngine {
             vertexColors: true
         });
 
+        // Objeto de uniform persistente para garantir atualização constante do tempo
+        this.plantUniforms = { uTime: { value: 0 } };
+
         this.plantMaterial = new THREE.MeshStandardMaterial({
             map: ATLAS_TEXTURE,
             side: THREE.DoubleSide,
             alphaTest: 0.5,
             roughness: 0.85,
             metalness: 0.0,
-            vertexColors: true
+            vertexColors: false // PUREZA DE ILUMINAÇÃO: Evita contaminação de cores e sombras pretas
         });
+
+        // --- SHADER DE VENTO LIMPO BASEADO EM DETEÇÃO LOCAL DE ALTURA ---
+        this.plantMaterial.onBeforeCompile = (shader) => {
+            shader.uniforms.uTime = this.plantUniforms.uTime;
+
+            shader.vertexShader = `
+                uniform float uTime;
+            ` + shader.vertexShader;
+
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <begin_vertex>',
+                `
+                #include <begin_vertex>
+                
+                // Vértices do topo (y >= 0.5 dentro do bloco) recebem impulso de vento
+                float localY = position.y - floor(position.y);
+                float isTop = step(0.4, localY);
+                
+                // Balanço suave por coordenadas de bloco
+                vec2 blockCenter = floor(position.xz) + vec2(0.5);
+                float waveX = sin(uTime * 2.8 + blockCenter.x * 0.8 + blockCenter.y * 0.6) * 0.10;
+                float waveZ = cos(uTime * 2.2 + blockCenter.x * 0.6 + blockCenter.y * 0.8) * 0.08;
+                
+                transformed.x += waveX * isTop;
+                transformed.z += waveZ * isTop;
+                `
+            );
+        };
+        this.plantMaterial.needsUpdate = true;
 
         this.waterMaterial = new THREE.MeshStandardMaterial({
             map: ATLAS_TEXTURE,
@@ -2400,7 +2432,7 @@ export class MinecraftEngine {
         const heartsEl = document.getElementById('hearts-display');
         if (heartsEl) {
             const heartsCount = Math.max(0, Math.ceil(this.hp / 10));
-            heartsEl.innerText = '❤️️'.repeat(heartsCount);
+            heartsEl.innerText = '❤'.repeat(heartsCount);
         }
 
         const hungerEl = document.getElementById('hunger-display');
@@ -2749,6 +2781,9 @@ export class MinecraftEngine {
                     const bInfo = BLOCK_TILES[type];
                     const isWater = (type === BLOCKS.WATER);
 
+                    // ============================================================
+                    // GEOMETRIA EM "X" COM ALTURA DE VENTO PURA
+                    // ============================================================
                     if (bInfo.plant) {
                         const tileCoord = bInfo.top;
                         const uMin = tileCoord[0] * (16 / 128);
@@ -2756,22 +2791,33 @@ export class MinecraftEngine {
                         const uMax = uMin + (16 / 128);
                         const vMax = vMin + (16 / 128);
 
-                        posP.push(wx+0.1, y, wz+0.1,  wx+0.9, y, wz+0.9,  wx+0.9, y+1, wz+0.9,  wx+0.1, y+1, wz+0.1);
+                        const jX = (this.getSeededRandom(wx, 11, wz) - 0.5) * 0.20;
+                        const jZ = (this.getSeededRandom(wx, 22, wz) - 0.5) * 0.20;
+
+                        const cx = wx + 0.5 + jX;
+                        const cz = wz + 0.5 + jZ;
+                        const r = 0.38;
+
+                        const x1 = cx - r, z1 = cz - r;
+                        const x2 = cx + r, z2 = cz + r;
+                        const x3 = cx - r, z3 = cz + r;
+                        const x4 = cx + r, z4 = cz - r;
+
+                        const yBase = y;
+                        const yTop = y + 0.95; // 0.95 garante diferenciação exata de altura local para o shader
+
+                        // Plano Diagonal 1
+                        posP.push(x1, yBase, z1,  x2, yBase, z2,  x2, yTop, z2,  x1, yTop, z1);
                         uvsP.push(uMin, vMin, uMax, vMin, uMax, vMax, uMin, vMax);
-                        for (let k=0; k<4; k++) { normP.push(0, 1, 0); colP.push(1, 1, 1); }
-                        indP.push(idxP, idxP+1, idxP+2, idxP, idxP+2, idxP+3);
+                        for (let k = 0; k < 4; k++) { normP.push(0, 1, 0); colP.push(1.0, 1.0, 1.0); }
+                        indP.push(idxP, idxP + 1, idxP + 2, idxP, idxP + 2, idxP + 3);
                         idxP += 4;
 
-                        posP.push(wx+0.1, y, wz+0.9,  wx+0.9, y, wz+0.1,  wx+0.9, y+1, wz+0.1,  wx+0.1, y+1, wz+0.9);
+                        // Plano Diagonal 2 (Perpendicular)
+                        posP.push(x3, yBase, z3,  x4, yBase, z4,  x4, yTop, z4,  x3, yTop, z3);
                         uvsP.push(uMin, vMin, uMax, vMin, uMax, vMax, uMin, vMax);
-                        for (let k=0; k<4; k++) { normP.push(0, 1, 0); colP.push(1, 1, 1); }
-                        indP.push(idxP, idxP+1, idxP+2, idxP, idxP+2, idxP+3);
-                        idxP += 4;
-
-                        posP.push(wx+0.5, y, wz+0.0,  wx+0.5, y, wz+1.0,  wx+0.5, y+1, wz+1.0,  wx+0.5, y+1, wz+0.0);
-                        uvsP.push(uMin, vMin, uMax, vMin, uMax, vMax, uMin, vMax);
-                        for (let k=0; k<4; k++) { normP.push(0, 1, 0); colP.push(1, 1, 1); }
-                        indP.push(idxP, idxP+1, idxP+2, idxP, idxP+2, idxP+3);
+                        for (let k = 0; k < 4; k++) { normP.push(0, 1, 0); colP.push(1.0, 1.0, 1.0); }
+                        indP.push(idxP, idxP + 1, idxP + 2, idxP, idxP + 2, idxP + 3);
                         idxP += 4;
 
                         continue;
@@ -2881,7 +2927,8 @@ export class MinecraftEngine {
 
         if (plantGeo.attributes.position.count > 0) {
             const plantMesh = new THREE.Mesh(plantGeo, this.plantMaterial);
-            plantMesh.castShadow = true; plantMesh.receiveShadow = true;
+            plantMesh.castShadow = false;   // ELIMINA O PISCAR PRETO (Z-fighting de sombra)
+            plantMesh.receiveShadow = false; // ELIMINA O AUTOSSOMBREAMENTO ESCURO
             plantMesh.frustumCulled = false;
             chunkGroup.add(plantMesh);
         }
@@ -3211,7 +3258,7 @@ export class MinecraftEngine {
                 const damage = (item && BLOCK_TILES[item.id]?.toolType === 'sword') ? BLOCK_TILES[item.id].toolDamage : 2;
                 this.network.sendHitMob(target.mob.id, damage);
                 if (item && BLOCK_TILES[item.id]?.toolType === 'sword') {
-                    this.notify("⚔️️ Ataque crítico com a Espada!");
+                    this.notify("⚔ Ataque crítico com a Espada!");
                 }
                 return;
             }
@@ -4053,6 +4100,9 @@ export class MinecraftEngine {
         if (this.waterShader) {
             this.waterShader.uniforms.uTime.value = this.waterTime;
         }
+        if (this.plantUniforms) {
+            this.plantUniforms.uTime.value = this.waterTime;
+        }
 
         const isLAN = this.network && (this.network.isHost || (this.network.netConn && this.network.netConn.open));
         const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
@@ -4140,7 +4190,7 @@ export class MinecraftEngine {
             }
 
             if (this.arrows && this.arrows.length > 0) {
-                for (let i = this.arrows.length - 1; i >= 0; i--) {
+                for (let i = 0; i < 14; i++) {
                     const arrow = this.arrows[i];
                     if (arrow && typeof arrow.update === 'function') {
                         if (arrow.update(delta)) {

@@ -642,6 +642,59 @@ export const ATLAS_CANVAS = generatedAtlas.canvas;
 })();
 
 // ============================================================
+// GRAMA ALTA COM PALETA VERDE VIVO E NATURAL (Coluna 3, Linha 1)
+// ============================================================
+(function drawTallGrass() {
+    if (!ATLAS_CANVAS) return;
+    const ctx = ATLAS_CANVAS.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const tileSize = 16;
+    const tileX = 3 * tileSize;
+    const tileY = 1 * tileSize;
+
+    ctx.clearRect(tileX, tileY, tileSize, tileSize);
+
+    const pixels = [
+        ".....1.......1..",
+        ".1...11.....11..",
+        ".1...11..1..11..",
+        ".11..11..11.111.",
+        ".11.111.111.111.",
+        ".11.111.1111111.",
+        "111.12111111211.",
+        "1111122111122111",
+        "1112222.11222111",
+        ".112222.11222211",
+        ".122222.2222221.",
+        ".12222..2222221.",
+        "..2221..2222.21.",
+        "..2231..2322.21.",
+        "..3331..2332.31.",
+        "..3331..3332.31."
+    ];
+
+    // Paleta de cores vibrantes e naturais
+    const palette = {
+        '1': '#4b721b81', // Verde Vivo Claro (Topo / Luz)
+        '2': '#2f5811', // Verde Vivo Médio (Corpo)
+        '3': '#3a781156'  // Verde Escuro (Base / Sombra)
+    };
+
+    for (let r = 0; r < 16; r++) {
+        for (let c = 0; c < 16; c++) {
+            const char = pixels[r][c];
+            if (char !== '.' && palette[char]) {
+                ctx.fillStyle = palette[char];
+                ctx.fillRect(tileX + c, tileY + r, 1, 1);
+            }
+        }
+    }
+
+    if (ATLAS_TEXTURE) ATLAS_TEXTURE.needsUpdate = true;
+})();
+
+// ============================================================
 // O GERADOR DE ÍCONES FICA NO FINAL DE TUDO!
 // ============================================================
 export const BLOCK_ICONS = {};
