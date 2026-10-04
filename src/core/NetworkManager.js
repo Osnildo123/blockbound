@@ -107,7 +107,12 @@ export class NetworkManager {
                     let doorsData = [];
                     if (typeof this.game.exportDoorsForNewPlayer === 'function') {
                         doorsData = this.game.exportDoorsForNewPlayer();
-                    } else if (this.game.doorMeshes) {
+                    } let torchesData = [];
+                    if (typeof this.game.exportTorchesForNewPlayer === 'function') {
+                        torchesData = this.game.exportTorchesForNewPlayer();
+                    }
+                    
+                    else if (this.game.doorMeshes) {
                         for (let [key, doorObj] of this.game.doorMeshes.entries()) {
                             const coords = key.split(',');
                             doorsData.push({
@@ -124,7 +129,8 @@ export class NetworkManager {
                         type: 'WORLD_INIT',
                         seed: seedToSend,
                         modifiedBlocks: Array.from(this.game.modifiedBlocks.entries()),
-                        doors: doorsData
+                        doors: doorsData,
+                        torches: torchesData
                     });
                 } else {
                     this.netConn.send({ type: 'AUTH_FAIL', reason: '🔒 Senha incorreta da sala!' });
@@ -171,12 +177,13 @@ export class NetworkManager {
             }
 
             if (data.doors && Array.isArray(data.doors)) {
-                if (typeof this.game.importDoorsFromHost === 'function') {
-                    this.game.importDoorsFromHost(data.doors);
-                } else {
-                    data.doors.forEach(door => {
-                        this.game.createDoorMesh(door.x, door.y, door.z, door.rot, door.isOpen);
-                    });
+            if (typeof this.game.importDoorsFromHost === 'function') {
+                this.game.importDoorsFromHost(data.doors);
+            }
+            }
+            if (data.torches && Array.isArray(data.torches)) {
+                if (typeof this.game.importTorchesFromHost === 'function') {
+                    this.game.importTorchesFromHost(data.torches);
                 }
             }
         } 

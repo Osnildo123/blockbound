@@ -440,7 +440,10 @@ export class MinecraftEngine {
         this.chestData = new Map();
         this.doorMeshes = new Map();
         this.populatedChunks = new Set();
+        // Adicionar junto às declarações de Maps:
         this.placedTorchLights = new Map();
+        this.torchMeshes = new Map(); // 👈 NOVO: guarda os modelos 3D das tochas
+        this.spawnerData = new Map();
         this.placedTotemLights = new Map();
 
         this.mobs = [];
@@ -525,6 +528,13 @@ export class MinecraftEngine {
         this.initInputs();
         this.initUI();
 
+        if (this.activeWorld && this.activeWorld.torchDirections) {
+            if (!window.TorchDirMemory) window.TorchDirMemory = new Map();
+            for (let entry of this.activeWorld.torchDirections) {
+                window.TorchDirMemory.set(entry[0], entry[1]);
+            }
+        }
+
         this.playerHand = new FirstPersonHand(this.camera);
 
         if (this.activeWorld && this.activeWorld.modifiedBlocks) {
@@ -560,6 +570,11 @@ export class MinecraftEngine {
                 const [dx, dy, dz] = key.split(',').map(Number);
                 this.createDoorMesh(dx, dy, dz);
             }
+            if (type === BLOCKS.TORCH) {
+                const [tx, ty, tz] = key.split(',').map(Number);
+                const dirCode = window.TorchDirMemory ? (window.TorchDirMemory.get(key) || 0) : 0;
+                this.createTorchMesh(tx, ty, tz, dirCode);
+            }
         }
 
         this.enterFullscreen();
@@ -588,6 +603,22 @@ export class MinecraftEngine {
 
         const defensePercent = Math.min(0.80, totalDefense * 0.04);
         const finalDamage = isDrowning ? Math.max(damage, 15) : Math.max(1, Math.round(damage * (1 - defensePercent)));
+        
+        // Armor degradation
+        if (!isDrowning && this.armorSlots) {
+            for (let i = 0; i < 4; i++) {
+                const item = this.armorSlots[i];
+                if (item && item.maxDurability) {
+                    item.durability -= 1; // 1 durability per hit
+                    if (item.durability <= 0) {
+                        this.armorSlots[i] = null;
+                        if (this.sound) this.sound.playBreak();
+                        this.notify("🛡️ Uma peça da armadura quebrou!");
+                    }
+                }
+            }
+        }
+
 
         this.hp = Math.max(0, this.hp - finalDamage);
         if (this.sound) this.sound.playBreak();
@@ -1137,6 +1168,15 @@ export class MinecraftEngine {
         this.modifiedBlocks.set(key, type);
         this.applyBlockLight(ix, iy, iz, type);
 
+        if (type === BLOCKS.TORCH) {
+            if (!window.TorchDirMemory) window.TorchDirMemory = new Map();
+            let dirCode = (forceRot !== null && forceRot !== undefined) ? forceRot : (window.TorchDirMemory.get(key) || 0);
+            window.TorchDirMemory.set(key, dirCode);
+            this.createTorchMesh(ix, iy, iz, dirCode);
+        } else {
+            this.removeTorchMesh(ix, iy, iz);
+        }
+
         let doorRot = forceRot; 
         
         const isDoor = (type === 8 || (typeof BLOCKS !== 'undefined' && type === BLOCKS.DOOR));
@@ -1179,7 +1219,8 @@ export class MinecraftEngine {
             modifiedBlocks: modifiedBlocksArr,
             chests: chestsArr,
             furnaces: furnacesArr,
-            doorRotations: doorRotationsArr
+            doorRotations: doorRotationsArr,
+            torchDirections: window.TorchDirMemory ? Array.from(window.TorchDirMemory.entries()) : []
         };
 
         try {
@@ -1644,6 +1685,125 @@ export class MinecraftEngine {
         }
     }
 
+    createTorchMesh(x, y, z, dirCode = 0) {
+    const key = `${x},${y},${z}`;
+    if (this.torchMeshes && this.torchMeshes.has(key)) {
+        this.removeTorchMesh(x, y, z);
+    }
+
+    if (!this.torchMeshes) this.torchMeshes = new Map();
+    if (!window.TorchDirMemory) window.TorchDirMemory = new Map();
+    window.TorchDirMemory.set(key, dirCode);
+
+    const torchGroup = new THREE.Group();
+    torchGroup.position.set(x, y, z);
+
+    const innerGroup = new THREE.Group();
+
+    // 1. Haste de madeira (Cabo)
+    const stickGeo = new THREE.BoxGeometry(0.12, 0.60, 0.12);
+    const stickMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.85 });
+    const stick = new THREE.Mesh(stickGeo, stickMat);
+    stick.position.y = 0.30;
+    stick.castShadow = true;
+    innerGroup.add(stick);
+
+    // 2. Topo Escurecido (Carvão/Pavio)
+    const topGeo = new THREE.BoxGeometry(0.16, 0.12, 0.16);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+    const topMesh = new THREE.Mesh(topGeo, topMat);
+    topMesh.position.y = 0.56;
+    innerGroup.add(topMesh);
+
+    // 3. Chama Voxel Externa (Laranja)
+    const flameOuterGeo = new THREE.BoxGeometry(0.18, 0.22, 0.18);
+    const flameOuterMat = new THREE.MeshBasicMaterial({ color: 0xff7700 });
+    const flameOuter = new THREE.Mesh(flameOuterGeo, flameOuterMat);
+    flameOuter.position.y = 0.70;
+    innerGroup.add(flameOuter);
+
+    // 4. Núcleo Amarelo Brilhante do Fogo
+    const flameCoreGeo = new THREE.BoxGeometry(0.10, 0.16, 0.10);
+    const flameCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    const flameCore = new THREE.Mesh(flameCoreGeo, flameCoreMat);
+    flameCore.position.y = 0.72;
+    innerGroup.add(flameCore);
+
+    // 5. Luz Pontual Emissiva Quente
+    const tLight = new THREE.PointLight(0xffaa44, 2.2, 18);
+    tLight.position.y = 0.75;
+    innerGroup.add(tLight);
+
+    // Inclinação de 45 graus (Math.PI / 4)
+    const rad45 = Math.PI / 4;
+    if (dirCode === 0) { // Chão
+        innerGroup.position.set(0.5, 0.0, 0.5);
+        innerGroup.rotation.set(0, 0, 0);
+    } else if (dirCode === 1) { // Fixada na Parede Oeste -> Base em 0.12, inclina para +X
+        innerGroup.position.set(0.12, 0.20, 0.5);
+        innerGroup.rotation.z = -rad45;
+    } else if (dirCode === 2) { // Fixada na Parede Leste -> Base em 0.88, inclina para -X
+        innerGroup.position.set(0.88, 0.20, 0.5);
+        innerGroup.rotation.z = rad45;
+    } else if (dirCode === 3) { // Fixada na Parede Sul -> Base em 0.12, inclina para +Z
+        innerGroup.position.set(0.5, 0.20, 0.12);
+        innerGroup.rotation.x = rad45;
+    } else if (dirCode === 4) { // Fixada na Parede Norte -> Base em 0.88, inclina para -Z
+        innerGroup.position.set(0.5, 0.20, 0.88);
+        innerGroup.rotation.x = -rad45;
+    }
+
+    torchGroup.add(innerGroup);
+    this.scene.add(torchGroup);
+
+    this.torchMeshes.set(key, {
+        group: torchGroup,
+        innerGroup: innerGroup,
+        light: tLight,
+        dirCode: dirCode
+    });
+}
+
+    removeTorchMesh(x, y, z) {
+        const key = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+        if (this.torchMeshes && this.torchMeshes.has(key)) {
+            const t = this.torchMeshes.get(key);
+            this.scene.remove(t.group);
+            t.group.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.torchMeshes.delete(key);
+        }
+    }
+
+    exportTorchesForNewPlayer() {
+        const torchesData = [];
+        if (this.torchMeshes) {
+            for (let [key, data] of this.torchMeshes.entries()) {
+                const coords = key.split(',');
+                torchesData.push({
+                    x: parseInt(coords[0]),
+                    y: parseInt(coords[1]),
+                    z: parseInt(coords[2]),
+                    dirCode: window.TorchDirMemory ? (window.TorchDirMemory.get(key) || 0) : 0
+                });
+            }
+        }
+        return torchesData;
+    }
+
+    importTorchesFromHost(torchesData) {
+        if (!torchesData || torchesData.length === 0) return;
+        if (!window.TorchDirMemory) window.TorchDirMemory = new Map();
+
+        torchesData.forEach(torch => {
+            const key = `${torch.x},${torch.y},${torch.z}`;
+            window.TorchDirMemory.set(key, torch.dirCode);
+            this.createTorchMesh(torch.x, torch.y, torch.z, torch.dirCode);
+        });
+    }
+
     initPhysics() {
         this.position = new THREE.Vector3(0.5, 20, 0.5);
         this.velocity = new THREE.Vector3();
@@ -1714,77 +1874,94 @@ export class MinecraftEngine {
     }
 
     spawnNightMobs(delta) {
-        const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
-        if (isClientLAN) return;
+    const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
+    if (isClientLAN) return;
 
-        const isNightTime = (this.dayTime >= 0.50 && this.dayTime <= 0.98);
+    // 1. DESPAWN DE MOBS DISTANTES: Remove inimigos a mais de 60 blocos para não sobrecarregar o mundo
+    for (let i = this.mobs.length - 1; i >= 0; i--) {
+        const mob = this.mobs[i];
+        if (mob && mob.isHostile && mob.mesh) {
+            const distToPlayer = mob.mesh.position.distanceTo(this.position);
+            if (distToPlayer > 60.0) {
+                this.scene.remove(mob.mesh);
+                this.mobs.splice(i, 1);
+            }
+        }
+    }
 
-        if (isNightTime) {
-            this.nightSpawnTimer -= delta;
-            const hostileCount = this.mobs.filter(m => m.isHostile).length;
+    const isNightTime = (this.dayTime >= 0.50 && this.dayTime <= 0.98);
 
-            if (this.nightSpawnTimer <= 0 && hostileCount < 6) {
-                this.nightSpawnTimer = 5.0;
+    if (isNightTime) {
+        this.nightSpawnTimer -= delta;
+        const hostileCount = this.mobs.filter(m => m.isHostile).length;
 
-                for (let attempt = 0; attempt < 10; attempt++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const dist = 38 + Math.random() * 22;
-                    const rx = this.position.x + Math.sin(angle) * dist;
-                    const rz = this.position.z + Math.cos(angle) * dist;
-                    const ry = this.getHighestBlockY(rx, rz);
+        // 2. MOB CAP: Limita a no máximo 6 mobs hostis simultâneos no mapa
+        if (this.nightSpawnTimer <= 0 && hostileCount < 6) {
+            this.nightSpawnTimer = 6.0;
 
-                    if (ry <= 11) continue;
+            for (let attempt = 0; attempt < 10; attempt++) {
+                const angle = Math.random() * Math.PI * 2;
+                
+                // 3. RAIO DE SPAWN SEGURO: Surgem entre 26 e 45 blocos longe do jogador
+                const dist = 26 + Math.random() * 19;
+                const rx = this.position.x + Math.sin(angle) * dist;
+                const rz = this.position.z + Math.cos(angle) * dist;
+                const ry = this.getHighestBlockY(rx, rz);
 
-                    const spawnVec = new THREE.Vector3(rx, ry + 1, rz);
-                    let tooCloseToAnyPlayer = spawnVec.distanceTo(this.position) < 32;
+                if (ry <= 11) continue; // Evita surgir dentro de lagos ou oceanos
 
-                    if (!tooCloseToAnyPlayer && this.remotePlayers) {
-                        for (let rp of this.remotePlayers.values()) {
-                            const pPos = rp.targetPos || rp.group.position;
-                            if (pPos && spawnVec.distanceTo(pPos) < 32) {
-                                tooCloseToAnyPlayer = true;
-                                break;
-                            }
+                const spawnVec = new THREE.Vector3(rx, ry + 1, rz);
+                
+                // Garante que NENHUM jogador está a menos de 24 blocos
+                let tooCloseToAnyPlayer = spawnVec.distanceTo(this.position) < 24.0;
+
+                if (!tooCloseToAnyPlayer && this.remotePlayers) {
+                    for (let rp of this.remotePlayers.values()) {
+                        const pPos = rp.targetPos || rp.group.position;
+                        if (pPos && spawnVec.distanceTo(pPos) < 24.0) {
+                            tooCloseToAnyPlayer = true;
+                            break;
                         }
-                    }
-
-                    if (!tooCloseToAnyPlayer) {
-                        const randType = Math.random();
-                        const type = randType < 0.4 ? 'creeper' : (randType < 0.7 ? 'spider' : 'skeleton');
-                        const mob = new VoxelMob(type, rx, ry + 1, rz, this);
-                        this.mobs.push(mob);
-                        this.scene.add(mob.mesh);
-                        this.notify(`⚠️ Inimigo noturno detetado ao longe: ${type.toUpperCase()}`);
-                        break;
                     }
                 }
+
+                if (!tooCloseToAnyPlayer) {
+                    const randType = Math.random();
+                    const type = randType < 0.35 ? 'creeper' : (randType < 0.65 ? 'spider' : 'skeleton');
+                    const mob = new VoxelMob(type, rx, ry + 1, rz, this);
+                    this.mobs.push(mob);
+                    this.scene.add(mob.mesh);
+                    break;
+                }
             }
-        } else {
-            for (let i = this.mobs.length - 1; i >= 0; i--) {
-                const mob = this.mobs[i];
-                if (mob && mob.isHostile) {
-                    mob.sunBurnTimer = (mob.sunBurnTimer || 0) + delta;
-                    if (mob.sunBurnTimer >= 0.4) {
-                        mob.sunBurnTimer = 0;
-                        mob.hp -= 5;
+        }
+    } else {
+        // Queimadura solar durante o dia
+        for (let i = this.mobs.length - 1; i >= 0; i--) {
+            const mob = this.mobs[i];
+            if (mob && mob.isHostile) {
+                mob.sunBurnTimer = (mob.sunBurnTimer || 0) + delta;
+                if (mob.sunBurnTimer >= 0.4) {
+                    mob.sunBurnTimer = 0;
+                    mob.hp -= 5;
 
-                        if (this.particleSystem && mob.mesh) {
-                            this.particleSystem.createBlockBreakParticles(
-                                mob.mesh.position.x,
-                                mob.mesh.position.y + 0.8,
-                                mob.mesh.position.z,
-                                0xff4500
-                            );
-                        }
+                    if (this.particleSystem && mob.mesh) {
+                        this.particleSystem.createBlockBreakParticles(
+                            mob.mesh.position.x,
+                            mob.mesh.position.y + 0.8,
+                            mob.mesh.position.z,
+                            0xff4500
+                        );
+                    }
 
-                        if (mob.hp <= 0) {
-                            mob.die();
-                        }
+                    if (mob.hp <= 0) {
+                        mob.die();
                     }
                 }
             }
         }
     }
+}
 
     togglePlayerList(show) {
         const overlay = document.getElementById('player-list-overlay');
@@ -2084,6 +2261,7 @@ export class MinecraftEngine {
         this.controls.unlock();
     }
 
+
     checkCrafting3x3() {
         const items = this.crafting3x3Slots.filter(s => s !== null);
         if (items.length === 0) {
@@ -2093,24 +2271,62 @@ export class MinecraftEngine {
 
         const ids = items.map(i => i.id);
 
-        if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
+        // Funções de ajuda para verificar padrões
+        const isPattern = (pattern) => {
+            for(let i=0; i<9; i++) {
+                const expected = pattern[i];
+                const actual = this.crafting3x3Slots[i] ? this.crafting3x3Slots[i].id : null;
+                if (expected === null && actual !== null) return false;
+                if (expected !== null && expected !== 'any' && actual !== expected) return false;
+            }
+            return true;
+        };
+
+        const getMaterialType = () => {
+            // Verifica o material predominante (topo) para as ferramentas e armaduras
+            for(let i=0; i<3; i++) {
+                if(this.crafting3x3Slots[i]) return this.crafting3x3Slots[i].id;
+            }
+            for(let i=3; i<6; i++) {
+                if(this.crafting3x3Slots[i]) return this.crafting3x3Slots[i].id;
+            }
+            return null;
+        }
+
+        const m = getMaterialType();
+
+        // 1. Receitas Básicas de Conversão
+        if (items.length === 1 && ids[0] === BLOCKS.WOOD) {
             this.craft3x3Result = { id: BLOCKS.PLANK, count: 4 };
             return;
         }
+        
+                if (items.length === 4 && ids.every(id => id === BLOCKS.STONE || id === BLOCKS.COBBLE)) {
+            // Se formar quadrado 2x2 na bancada 3x3
+            if ((this.crafting3x3Slots[0] && this.crafting3x3Slots[1] && this.crafting3x3Slots[3] && this.crafting3x3Slots[4]) ||
+                (this.crafting3x3Slots[1] && this.crafting3x3Slots[2] && this.crafting3x3Slots[4] && this.crafting3x3Slots[5]) ||
+                (this.crafting3x3Slots[3] && this.crafting3x3Slots[4] && this.crafting3x3Slots[6] && this.crafting3x3Slots[7]) ||
+                (this.crafting3x3Slots[4] && this.crafting3x3Slots[5] && this.crafting3x3Slots[7] && this.crafting3x3Slots[8])) {
+                this.craft3x3Result = { id: BLOCKS.STONE_BRICK, count: 4 };
+                return;
+            }
+        }
 
-        if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
-            this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
+        // 2. Blocos Essenciais (Bancada, Fornalha, Baú)
+                if (items.length === 4 && ids.every(id => id === BLOCKS.STONE || id === BLOCKS.COBBLE)) {
+            this.craftResult = { id: BLOCKS.STONE_BRICK, count: 4 };
             return;
         }
 
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
-            this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
-            return;
-        }
-
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
-            this.craft3x3Result = { id: BLOCKS.STONE, count: 4 };
-            return;
+        if (items.length === 4 && ids.every(id => id === BLOCKS.PLANK)) {
+            // Apenas se formar um quadrado 2x2
+            if ((this.crafting3x3Slots[0] && this.crafting3x3Slots[1] && this.crafting3x3Slots[3] && this.crafting3x3Slots[4]) ||
+                (this.crafting3x3Slots[1] && this.crafting3x3Slots[2] && this.crafting3x3Slots[4] && this.crafting3x3Slots[5]) ||
+                (this.crafting3x3Slots[3] && this.crafting3x3Slots[4] && this.crafting3x3Slots[6] && this.crafting3x3Slots[7]) ||
+                (this.crafting3x3Slots[4] && this.crafting3x3Slots[5] && this.crafting3x3Slots[7] && this.crafting3x3Slots[8])) {
+                this.craft3x3Result = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
+                return;
+            }
         }
 
         if (items.length === 8 && ids.every(id => id === BLOCKS.PLANK) && !this.crafting3x3Slots[4]) {
@@ -2123,28 +2339,112 @@ export class MinecraftEngine {
             return;
         }
 
-        if (this.crafting3x3Slots[0]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[2]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[4]?.id === BLOCKS.PLANK &&
-            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 5) {
-            this.craft3x3Result = { id: BLOCKS.DIAMOND_PICKAXE, count: 1 };
+        // Porta (2 colunas de 3 tábuas)
+        if (items.length === 6 && ids.every(id => id === BLOCKS.PLANK)) {
+            if ((this.crafting3x3Slots[0] && this.crafting3x3Slots[1] && this.crafting3x3Slots[3] && this.crafting3x3Slots[4] && this.crafting3x3Slots[6] && this.crafting3x3Slots[7]) ||
+                (this.crafting3x3Slots[1] && this.crafting3x3Slots[2] && this.crafting3x3Slots[4] && this.crafting3x3Slots[5] && this.crafting3x3Slots[7] && this.crafting3x3Slots[8])) {
+                this.craft3x3Result = { id: BLOCKS.DOOR, count: 3 };
+                return;
+            }
+        }
+
+        // 3. Ferramentas e Armas (Picareta, Machado, Espada)
+        if (items.length === 5 && this.crafting3x3Slots[4]?.id === BLOCKS.PLANK && this.crafting3x3Slots[7]?.id === BLOCKS.PLANK) {
+            // Verifica formato de Picareta: M, M, M na linha de cima
+            if (this.crafting3x3Slots[0]?.id === m && this.crafting3x3Slots[1]?.id === m && this.crafting3x3Slots[2]?.id === m) {
+                if (m === BLOCKS.PLANK) this.craft3x3Result = { id: BLOCKS.WOOD_PICKAXE, count: 1 };
+                else if (m === BLOCKS.COBBLE) this.craft3x3Result = { id: BLOCKS.STONE_PICKAXE, count: 1 };
+                else if (m === BLOCKS.IRON_INGOT) this.craft3x3Result = { id: BLOCKS.IRON_PICKAXE, count: 1 };
+                else if (m === BLOCKS.GOLD_INGOT) this.craft3x3Result = { id: BLOCKS.GOLD_PICKAXE, count: 1 };
+                else if (m === BLOCKS.DIAMOND_ORE) this.craft3x3Result = { id: BLOCKS.DIAMOND_PICKAXE, count: 1 };
+                if (this.craft3x3Result) return;
+            }
+        }
+
+        if (items.length === 5 && this.crafting3x3Slots[4]?.id === BLOCKS.PLANK && this.crafting3x3Slots[7]?.id === BLOCKS.PLANK) {
+            // Verifica formato de Machado: M, M (cima) e M (meio esquerda ou meio direita)
+            if ((this.crafting3x3Slots[0]?.id === m && this.crafting3x3Slots[1]?.id === m && this.crafting3x3Slots[3]?.id === m) ||
+                (this.crafting3x3Slots[1]?.id === m && this.crafting3x3Slots[2]?.id === m && this.crafting3x3Slots[5]?.id === m)) {
+                if (m === BLOCKS.PLANK) this.craft3x3Result = { id: BLOCKS.WOOD_AXE, count: 1 };
+                else if (m === BLOCKS.COBBLE) this.craft3x3Result = { id: BLOCKS.STONE_AXE, count: 1 };
+                else if (m === BLOCKS.IRON_INGOT) this.craft3x3Result = { id: BLOCKS.IRON_AXE, count: 1 };
+                else if (m === BLOCKS.GOLD_INGOT) this.craft3x3Result = { id: BLOCKS.GOLD_AXE, count: 1 };
+                else if (m === BLOCKS.DIAMOND_ORE) this.craft3x3Result = { id: BLOCKS.DIAMOND_AXE, count: 1 };
+                if (this.craft3x3Result) return;
+            }
+        }
+
+        if (items.length === 3 && this.crafting3x3Slots[7]?.id === BLOCKS.PLANK) {
+            // Verifica formato de Espada: M (cima), M (meio)
+            if (this.crafting3x3Slots[1]?.id === m && this.crafting3x3Slots[4]?.id === m) {
+                if (m === BLOCKS.PLANK) this.craft3x3Result = { id: BLOCKS.WOOD_SWORD, count: 1 };
+                else if (m === BLOCKS.COBBLE) this.craft3x3Result = { id: BLOCKS.STONE_SWORD, count: 1 };
+                else if (m === BLOCKS.IRON_INGOT) this.craft3x3Result = { id: BLOCKS.IRON_SWORD, count: 1 };
+                else if (m === BLOCKS.GOLD_INGOT) this.craft3x3Result = { id: BLOCKS.GOLD_SWORD, count: 1 };
+                else if (m === BLOCKS.DIAMOND_ORE) this.craft3x3Result = { id: BLOCKS.DIAMOND_SWORD, count: 1 };
+                if (this.craft3x3Result) return;
+            }
+        }
+
+        // 4. Armaduras
+        if (items.length === 5 && !this.crafting3x3Slots[4] && !this.crafting3x3Slots[7] && !this.crafting3x3Slots[8] && !this.crafting3x3Slots[6]) {
+            // Capacete
+            if (m === BLOCKS.IRON_INGOT) { this.craft3x3Result = { id: BLOCKS.IRON_HELMET, count: 1 }; return; }
+        }
+
+        if (items.length === 8 && !this.crafting3x3Slots[1]) {
+            // Peitoral
+            if (m === BLOCKS.IRON_INGOT) { this.craft3x3Result = { id: BLOCKS.IRON_CHESTPLATE, count: 1 }; return; }
+        }
+
+        if (items.length === 7 && !this.crafting3x3Slots[4] && !this.crafting3x3Slots[7]) {
+            // Calças
+            if (m === BLOCKS.IRON_INGOT) { this.craft3x3Result = { id: BLOCKS.IRON_LEGGINGS, count: 1 }; return; }
+        }
+
+        if (items.length === 4 && !this.crafting3x3Slots[1] && !this.crafting3x3Slots[4] && !this.crafting3x3Slots[7] && !this.crafting3x3Slots[0] && !this.crafting3x3Slots[2]) {
+            // Botas (Apenas posições 3,5, 6,8)
+            if (this.crafting3x3Slots[3]?.id === m && this.crafting3x3Slots[5]?.id === m && this.crafting3x3Slots[6]?.id === m && this.crafting3x3Slots[8]?.id === m) {
+                if (m === BLOCKS.IRON_INGOT) { this.craft3x3Result = { id: BLOCKS.IRON_BOOTS, count: 1 }; return; }
+            }
+        }
+
+        // 5. Itens Especiais (Balde, Arco, Isqueiro, Totem)
+        if (items.length === 3 && ids.every(id => id === BLOCKS.IRON_INGOT)) {
+            // Forma de V para o balde
+            if (this.crafting3x3Slots[3] && this.crafting3x3Slots[5] && this.crafting3x3Slots[7]) {
+                this.craft3x3Result = { id: BLOCKS.BUCKET, count: 1 };
+                return;
+            }
+        }
+
+        // Tocha
+        if (items.length === 2 && this.crafting3x3Slots[4]?.id === BLOCKS.PLANK && this.crafting3x3Slots[1]?.id === BLOCKS.COAL_ORE) {
+            this.craft3x3Result = { id: BLOCKS.TORCH, count: 4 };
             return;
         }
 
-        if (this.crafting3x3Slots[1]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[4]?.id === BLOCKS.DIAMOND_ORE &&
-            this.crafting3x3Slots[7]?.id === BLOCKS.PLANK && items.length === 3) {
-            this.craft3x3Result = { id: BLOCKS.DIAMOND_SWORD, count: 1 };
+        // Fogueira
+        if (items.length === 6 && 
+            this.crafting3x3Slots[6]?.id === BLOCKS.WOOD && this.crafting3x3Slots[7]?.id === BLOCKS.WOOD && this.crafting3x3Slots[8]?.id === BLOCKS.WOOD &&
+            this.crafting3x3Slots[3]?.id === BLOCKS.PLANK && this.crafting3x3Slots[5]?.id === BLOCKS.PLANK && 
+            this.crafting3x3Slots[4]?.id === BLOCKS.COAL_ORE) {
+            this.craft3x3Result = { id: BLOCKS.CAMPFIRE, count: 1 };
+            return;
+        }
+        
+        // Totem Repelente
+        if (items.length === 5 && 
+            this.crafting3x3Slots[4]?.id === BLOCKS.ELEMENTAL_CORE &&
+            this.crafting3x3Slots[1]?.id === BLOCKS.GOLD_INGOT &&
+            this.crafting3x3Slots[3]?.id === BLOCKS.GOLD_INGOT &&
+            this.crafting3x3Slots[5]?.id === BLOCKS.GOLD_INGOT &&
+            this.crafting3x3Slots[7]?.id === BLOCKS.GOLD_INGOT) {
+            this.craft3x3Result = { id: BLOCKS.TOTEM, count: 1 };
             return;
         }
 
         this.craft3x3Result = null;
-
-        if (items.length === 3 && ids.every(id => id === BLOCKS.IRON_INGOT)) {
-            this.craft3x3Result = { id: BLOCKS.BUCKET, count: 1 };
-            return;
-        }
     }
 
     takeCraft3x3Result() {
@@ -2153,9 +2453,20 @@ export class MinecraftEngine {
         const result = this.craft3x3Result;
         const floatItem = document.getElementById('floating-item');
 
+        const itemInfo = BLOCK_TILES[result.id];
+        let maxDurability = null;
+        if (itemInfo && (itemInfo.isTool || itemInfo.isArmor)) {
+            if (itemInfo.toolType === 'wood' || result.id === BLOCKS.WOOD_SWORD || result.id === BLOCKS.WOOD_PICKAXE || result.id === BLOCKS.WOOD_AXE) maxDurability = 60;
+            else if (itemInfo.toolType === 'stone' || result.id === BLOCKS.STONE_SWORD || result.id === BLOCKS.STONE_PICKAXE || result.id === BLOCKS.STONE_AXE) maxDurability = 132;
+            else if (itemInfo.toolType === 'iron' || result.id === BLOCKS.IRON_SWORD || result.id === BLOCKS.IRON_PICKAXE || result.id === BLOCKS.IRON_AXE || result.id === BLOCKS.IRON_HELMET || result.id === BLOCKS.IRON_CHESTPLATE || result.id === BLOCKS.IRON_LEGGINGS || result.id === BLOCKS.IRON_BOOTS) maxDurability = 250;
+            else if (itemInfo.toolType === 'gold' || result.id === BLOCKS.GOLD_SWORD || result.id === BLOCKS.GOLD_PICKAXE || result.id === BLOCKS.GOLD_AXE) maxDurability = 32;
+            else if (itemInfo.toolType === 'diamond' || result.id === BLOCKS.DIAMOND_SWORD || result.id === BLOCKS.DIAMOND_PICKAXE || result.id === BLOCKS.DIAMOND_AXE) maxDurability = 1560;
+            else maxDurability = 100; // fallback
+        }
+
         if (!this.draggedSlot) {
-            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
-        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
+            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count, maxDurability: maxDurability, durability: maxDurability } };
+        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= (maxDurability ? 1 : 64)) {
             this.draggedSlot.item.count += result.count;
         } else {
             return;
@@ -2181,22 +2492,49 @@ export class MinecraftEngine {
     }
 
     updateCraftingTableUI() {
-        for (let i = 0; i < 9; i++) {
-            const slot = document.getElementById(`craft3x3-slot-${i}`);
-            if (!slot) continue;
-            const item = this.crafting3x3Slots[i];
+        const renderSlot = (slot, item) => {
+            if (!slot) return;
             const iconEl = slot.querySelector('.slot-icon');
             const countEl = slot.querySelector('.slot-count');
-
+            let durBar = slot.querySelector('.durability-bar');
+            
             if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
                 if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
                 else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
                 if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
+                
+                if (item.maxDurability) {
+                    if (!durBar) {
+                        durBar = document.createElement('div');
+                        durBar.className = 'durability-bar';
+                        durBar.style.cssText = 'position:absolute; bottom:0; left:2px; width:90%; height:4px; background:rgba(0,0,0,0.5); pointer-events:none;';
+                        const durFill = document.createElement('div');
+                        durFill.className = 'durability-fill';
+                        durFill.style.cssText = 'height:100%;';
+                        durBar.appendChild(durFill);
+                        slot.appendChild(durBar);
+                    }
+                    const fill = durBar.querySelector('.durability-fill');
+                    const percent = item.durability / item.maxDurability;
+                    fill.style.width = `${percent * 100}%`;
+                    if (percent > 0.6) fill.style.backgroundColor = '#4ade80';
+                    else if (percent > 0.25) fill.style.backgroundColor = '#facc15';
+                    else fill.style.backgroundColor = '#f87171';
+                    durBar.style.display = 'block';
+                } else if (durBar) {
+                    durBar.style.display = 'none';
+                }
+                
             } else {
                 if (iconEl) iconEl.style.backgroundImage = 'none';
                 else slot.style.backgroundImage = 'none';
                 if (countEl) countEl.innerText = '';
+                if (durBar) durBar.style.display = 'none';
             }
+        };
+
+        for (let i = 0; i < 9; i++) {
+            renderSlot(document.getElementById(`craft3x3-slot-${i}`), this.crafting3x3Slots[i]);
         }
 
         const resSlot = document.getElementById('craft3x3-result');
@@ -2210,23 +2548,11 @@ export class MinecraftEngine {
         }
 
         for (let i = 0; i < 27; i++) {
-            const slot = document.getElementById(`craft3x3-inv-${i}`);
-            if (!slot) continue;
-            const item = this.inventorySlots[i];
-            const iconEl = slot.querySelector('.slot-icon');
-            const countEl = slot.querySelector('.slot-count');
-
-            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                if (countEl) countEl.innerText = item.count;
-            } else {
-                if (iconEl) iconEl.style.backgroundImage = 'none';
-                if (countEl) countEl.innerText = '';
-            }
+            renderSlot(document.getElementById(`craft3x3-inv-${i}`), this.inventorySlots[i]);
         }
+        
         this.updateUI();
     }
-
     checkCrafting() {
         const items = this.craftingSlots.filter(s => s !== null);
         if (items.length === 0) {
@@ -2236,27 +2562,32 @@ export class MinecraftEngine {
 
         const ids = items.map(i => i.id);
 
-        if (items.length === 1 && items[0].id === BLOCKS.WOOD) {
+        if (items.length === 1 && ids[0] === BLOCKS.WOOD) {
             this.craftResult = { id: BLOCKS.PLANK, count: 4 };
             return;
         }
 
-        if (items.length === 2 && items.every(i => i.id === BLOCKS.PLANK)) {
+        if (items.length === 2 && this.craftingSlots[2]?.id === BLOCKS.PLANK && this.craftingSlots[0]?.id === BLOCKS.COAL_ORE) {
+            this.craftResult = { id: BLOCKS.TORCH, count: 4 };
+            return;
+        }
+        
+        if (items.length === 2 && this.craftingSlots[3]?.id === BLOCKS.PLANK && this.craftingSlots[1]?.id === BLOCKS.COAL_ORE) {
             this.craftResult = { id: BLOCKS.TORCH, count: 4 };
             return;
         }
 
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.PLANK)) {
+                if (items.length === 4 && ids.every(id => id === BLOCKS.STONE || id === BLOCKS.COBBLE)) {
+            this.craftResult = { id: BLOCKS.STONE_BRICK, count: 4 };
+            return;
+        }
+
+        if (items.length === 4 && ids.every(id => id === BLOCKS.PLANK)) {
             this.craftResult = { id: BLOCKS.CRAFTING_TABLE, count: 1 };
             return;
         }
 
-        if (items.length === 4 && items.every(i => i.id === BLOCKS.COBBLE)) {
-            this.craftResult = { id: BLOCKS.STONE, count: 4 };
-            return;
-        }
-
-        if (items.length === 2 && ids.includes(BLOCKS.IRON_ORE) && (ids.includes(BLOCKS.COBBLE) || ids.includes(BLOCKS.COAL_ORE))) {
+        if (items.length === 2 && ids.includes(BLOCKS.IRON_INGOT) && (ids.includes(BLOCKS.COBBLE) || ids.includes(BLOCKS.COAL_ORE))) {
             this.craftResult = { id: BLOCKS.FLINT_STEEL, count: 1 };
             return;
         }
@@ -2270,9 +2601,20 @@ export class MinecraftEngine {
         const result = this.craftResult;
         const floatItem = document.getElementById('floating-item');
 
+        const itemInfo = BLOCK_TILES[result.id];
+        let maxDurability = null;
+        if (itemInfo && (itemInfo.isTool || itemInfo.isArmor)) {
+            if (itemInfo.toolType === 'wood' || result.id === BLOCKS.WOOD_SWORD || result.id === BLOCKS.WOOD_PICKAXE || result.id === BLOCKS.WOOD_AXE) maxDurability = 60;
+            else if (itemInfo.toolType === 'stone' || result.id === BLOCKS.STONE_SWORD || result.id === BLOCKS.STONE_PICKAXE || result.id === BLOCKS.STONE_AXE) maxDurability = 132;
+            else if (itemInfo.toolType === 'iron' || result.id === BLOCKS.IRON_SWORD || result.id === BLOCKS.IRON_PICKAXE || result.id === BLOCKS.IRON_AXE || result.id === BLOCKS.IRON_HELMET || result.id === BLOCKS.IRON_CHESTPLATE || result.id === BLOCKS.IRON_LEGGINGS || result.id === BLOCKS.IRON_BOOTS) maxDurability = 250;
+            else if (itemInfo.toolType === 'gold' || result.id === BLOCKS.GOLD_SWORD || result.id === BLOCKS.GOLD_PICKAXE || result.id === BLOCKS.GOLD_AXE) maxDurability = 32;
+            else if (itemInfo.toolType === 'diamond' || result.id === BLOCKS.DIAMOND_SWORD || result.id === BLOCKS.DIAMOND_PICKAXE || result.id === BLOCKS.DIAMOND_AXE) maxDurability = 1560;
+            else maxDurability = 100; // fallback
+        }
+
         if (!this.draggedSlot) {
-            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count } };
-        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= 64) {
+            this.draggedSlot = { type: 'result', index: -1, item: { id: result.id, count: result.count, maxDurability: maxDurability, durability: maxDurability } };
+        } else if (this.draggedSlot.item.id === result.id && (this.draggedSlot.item.count + result.count) <= (maxDurability ? 1 : 64)) {
             this.draggedSlot.item.count += result.count;
         } else {
             return;
@@ -2296,7 +2638,6 @@ export class MinecraftEngine {
         this.updateUI();
         if (this.sound) this.sound.playPlace();
     }
-
     getSourceList(type) {
         if (type === 'armor') return this.armorSlots;
         if (type === 'chest') return this.chestData.get(this.activeChestKey);
@@ -2428,6 +2769,7 @@ export class MinecraftEngine {
         document.querySelectorAll('.slot').forEach((s, i) => s.classList.toggle('active', i === idx));
     }
 
+
     updateUI() {
         const heartsEl = document.getElementById('hearts-display');
         if (heartsEl) {
@@ -2453,88 +2795,59 @@ export class MinecraftEngine {
         const breathValEl = document.getElementById('breath-val');
         if (breathValEl) breathValEl.innerText = `${Math.round((this.breathTimer / 10.0) * 100)}%`;
 
-        for (let i = 0; i < 9; i++) {
-            const slot = document.getElementById(`slot-${i}`);
-            const guiHotbarSlot = document.getElementById(`gui-hotbar-${i}`);
-            const item = this.hotbarSlots[i];
-
-            if (slot) {
-                const iconEl = slot.querySelector('.slot-icon');
-                const countEl = slot.querySelector('.slot-count');
-
-                if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                    if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                    if (countEl) countEl.innerText = item.count;
-                } else {
-                    if (iconEl) iconEl.style.backgroundImage = 'none';
-                    if (countEl) countEl.innerText = '';
-                }
-            }
-
-            if (guiHotbarSlot) {
-                const iconEl = guiHotbarSlot.querySelector('.slot-icon');
-                const countEl = guiHotbarSlot.querySelector('.slot-count');
-
-                if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                    if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                    if (countEl) countEl.innerText = item.count;
-                } else {
-                    if (iconEl) iconEl.style.backgroundImage = 'none';
-                    if (countEl) countEl.innerText = '';
-                }
-            }
-        }
-
-        for (let i = 0; i < 27; i++) {
-            const slot = document.getElementById(`inv-${i}`);
-            if (!slot) continue;
-            const item = this.inventorySlots[i];
+        const renderSlot = (slot, item) => {
+            if (!slot) return;
             const iconEl = slot.querySelector('.slot-icon');
             const countEl = slot.querySelector('.slot-count');
-
-            if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                if (countEl) countEl.innerText = item.count;
-            } else {
-                if (iconEl) iconEl.style.backgroundImage = 'none';
-                if (countEl) countEl.innerText = '';
-            }
-        }
-
-        for (let i = 0; i < 4; i++) {
-            const slot = document.getElementById(`craft-${i}`);
-            if (!slot) continue;
-            const item = this.craftingSlots[i];
-            const iconEl = slot.querySelector('.slot-icon');
-            const countEl = slot.querySelector('.slot-count');
-
+            let durBar = slot.querySelector('.durability-bar');
+            
             if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
                 if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
                 else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
                 if (countEl) countEl.innerText = item.count > 1 ? item.count : '';
-                slot.style.backgroundSize = 'cover';
+                
+                if (item.maxDurability) {
+                    if (!durBar) {
+                        durBar = document.createElement('div');
+                        durBar.className = 'durability-bar';
+                        durBar.style.cssText = 'position:absolute; bottom:0; left:2px; width:90%; height:4px; background:rgba(0,0,0,0.5); pointer-events:none;';
+                        const durFill = document.createElement('div');
+                        durFill.className = 'durability-fill';
+                        durFill.style.cssText = 'height:100%;';
+                        durBar.appendChild(durFill);
+                        slot.appendChild(durBar);
+                    }
+                    const fill = durBar.querySelector('.durability-fill');
+                    const percent = item.durability / item.maxDurability;
+                    fill.style.width = `${percent * 100}%`;
+                    if (percent > 0.6) fill.style.backgroundColor = '#4ade80';
+                    else if (percent > 0.25) fill.style.backgroundColor = '#facc15';
+                    else fill.style.backgroundColor = '#f87171';
+                    durBar.style.display = 'block';
+                } else if (durBar) {
+                    durBar.style.display = 'none';
+                }
+                
             } else {
                 if (iconEl) iconEl.style.backgroundImage = 'none';
                 else slot.style.backgroundImage = 'none';
                 if (countEl) countEl.innerText = '';
+                if (durBar) durBar.style.display = 'none';
             }
+        };
+
+        for (let i = 0; i < 9; i++) {
+            renderSlot(document.getElementById(`slot-${i}`), this.hotbarSlots[i]);
+            renderSlot(document.getElementById(`gui-hotbar-${i}`), this.hotbarSlots[i]);
         }
 
-        if (this.armorSlots) {
-            for (let i = 0; i < 4; i++) {
-                const slot = document.getElementById(`armor-${i}`);
-                if (!slot) continue;
-                const item = this.armorSlots[i];
-                const iconEl = slot.querySelector('.slot-icon');
+        for (let i = 0; i < 27; i++) {
+            renderSlot(document.getElementById(`inv-${i}`), this.inventorySlots[i]);
+        }
 
-                if (item && item.count > 0 && BLOCK_ICONS[item.id]) {
-                    if (iconEl) iconEl.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                    else slot.style.backgroundImage = `url(${BLOCK_ICONS[item.id]})`;
-                } else {
-                    if (iconEl) iconEl.style.backgroundImage = 'none';
-                    else slot.style.backgroundImage = 'none';
-                }
-            }
+        for (let i = 0; i < 4; i++) {
+            renderSlot(document.getElementById(`craft-${i}`), this.craftingSlots[i]);
+            renderSlot(document.getElementById(`armor-${i}`), this.armorSlots[i]);
         }
 
         const resSlot = document.getElementById('craft-result');
@@ -2548,6 +2861,18 @@ export class MinecraftEngine {
         }
     }
 
+    reduceItemDurability(slotIndex, amount = 1) {
+        const item = this.hotbarSlots[slotIndex];
+        if (item && item.maxDurability) {
+            item.durability -= amount;
+            if (item.durability <= 0) {
+                this.sound.playBreak(); // Play break sound for tool
+                this.hotbarSlots[slotIndex] = null;
+                this.notify("⚔️ Ferramenta quebrou!");
+            }
+            this.updateUI();
+        }
+    }
     notify(msg) {
         const container = document.getElementById('notifications');
         if (!container) return;
@@ -2612,6 +2937,105 @@ export class MinecraftEngine {
 
         for (let th = 0; th < height; th++) {
             this.worldData.set(`${wx},${y + th},${wz}`, BLOCKS.WOOD);
+        }
+    }
+
+
+    generateDungeonRoom(rx, ry, rz, mobType) {
+        const spawnerKey = `${rx},${ry + 1},${rz}`;
+        if (this.spawnerData && this.spawnerData.has(spawnerKey)) return;
+
+        if (!this.spawnerData) this.spawnerData = new Map();
+        this.spawnerData.set(spawnerKey, {
+            mobType: mobType,
+            spawnTimer: 2.0,
+            x: rx, y: ry + 1, z: rz
+        });
+
+        // Constrói a estrutura 7x7x5 de Tijolos de Pedra
+        for (let x = -3; x <= 3; x++) {
+            for (let z = -3; z <= 3; z++) {
+                for (let h = 0; h <= 4; h++) {
+                    const wx = rx + x;
+                    const wy = ry + h;
+                    const wz = rz + z;
+                    const key = `${wx},${wy},${wz}`;
+
+                    if (Math.abs(x) === 3 || Math.abs(z) === 3 || h === 0 || h === 4) {
+                        const wallMat = (this.getSeededRandom(wx, wy, wz) < 0.7) ? BLOCKS.STONE_BRICK : BLOCKS.COBBLE;
+                        this.worldData.set(key, wallMat);
+                    } else {
+                        this.worldData.set(key, BLOCKS.AIR);
+                    }
+                }
+            }
+        }
+
+        // Coloca o Spawner no centro
+        this.worldData.set(spawnerKey, BLOCKS.MOB_SPAWNER);
+
+        // Coloca um Baú com Loots valiosos de Dungeon
+        const chestKey = `${rx + 2},${ry + 1},${rz}`;
+        this.worldData.set(chestKey, BLOCKS.CHEST);
+
+        if (!this.chestData.has(chestKey)) {
+            const loot = Array(27).fill(null);
+            loot[0] = { id: BLOCKS.IRON_INGOT, count: 4 + Math.floor(Math.random() * 6) };
+            loot[1] = { id: BLOCKS.GOLD_INGOT, count: 2 + Math.floor(Math.random() * 4) };
+            loot[2] = { id: BLOCKS.BOW, count: 1 };
+            loot[3] = { id: BLOCKS.ELEMENTAL_CORE, count: 1 };
+            if (Math.random() < 0.6) loot[4] = { id: BLOCKS.DIAMOND_ORE, count: 2 };
+            if (Math.random() < 0.5) loot[5] = { id: BLOCKS.COOKED_MEAT, count: 8 };
+            this.chestData.set(chestKey, loot);
+        }
+    }
+
+    updateSpawners(delta) {
+        if (!this.spawnerData || this.spawnerData.size === 0) return;
+
+        const isClientLAN = this.network && !this.network.isHost && this.network.netConn && this.network.netConn.open;
+        if (isClientLAN) return;
+
+        for (let [key, spawner] of this.spawnerData.entries()) {
+            const [sx, sy, sz] = key.split(',').map(Number);
+
+            if (this.getBlock(sx, sy, sz) !== BLOCKS.MOB_SPAWNER) {
+                this.spawnerData.delete(key);
+                continue;
+            }
+
+            const spawnerPos = new THREE.Vector3(sx + 0.5, sy + 0.5, sz + 0.5);
+            const distToPlayer = spawnerPos.distanceTo(this.position);
+
+            if (distToPlayer <= 20.0) {
+                if (Math.random() < 0.35 && this.particleSystem) {
+                    this.particleSystem.createBlockBreakParticles(sx + 0.5, sy + 0.6, sz + 0.5, 0x06b6d4);
+                }
+
+                spawner.spawnTimer -= delta;
+                if (spawner.spawnTimer <= 0) {
+                    spawner.spawnTimer = 7.0 + Math.random() * 5.0;
+
+                    const nearbyMobs = this.mobs.filter(m => m.type === spawner.mobType && m.mesh && m.mesh.position.distanceTo(spawnerPos) < 14.0).length;
+
+                    if (nearbyMobs < 4) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const spawnDist = 1.5 + Math.random() * 2.5;
+                        const spawnX = sx + 0.5 + Math.cos(angle) * spawnDist;
+                        const spawnZ = sz + 0.5 + Math.sin(angle) * spawnDist;
+                        const spawnY = sy;
+
+                        const mob = new VoxelMob(spawner.mobType, spawnX, spawnY, spawnZ, this);
+                        this.mobs.push(mob);
+                        this.scene.add(mob.mesh);
+
+                        if (this.particleSystem) {
+                            this.particleSystem.createMobHitParticles(spawnX, spawnY + 0.5, spawnZ, true);
+                        }
+                        this.notify(`⚡ Inimigo gerado pelo Spawner: ${spawner.mobType.toUpperCase()}`);
+                    }
+                }
+            }
         }
     }
 
@@ -2738,7 +3162,18 @@ export class MinecraftEngine {
                         }
                     }
                 }
-            }
+
+        // Geração Procedural de Dungeons e Spawners
+        const chunkSeed = this.getSeededRandom(cx, 888, cz);
+        if (chunkSeed < 0.12 && (Math.abs(cx) > 1 || Math.abs(cz) > 1)) {
+            const dungeonX = cx * size + 8;
+            const dungeonZ = cz * size + 8;
+            const dungeonY = -35 + Math.floor(chunkSeed * 100) % 25;
+            const mobType = (chunkSeed > 0.06) ? 'skeleton' : 'spider';
+            this.generateDungeonRoom(dungeonX, dungeonY, dungeonZ, mobType);
+        }
+    }
+
         }
     }
 
@@ -2776,7 +3211,7 @@ export class MinecraftEngine {
 
                 for (let y = -48; y <= 40; y++) {
                     const type = this.getBlock(wx, y, wz);
-                    if (type === BLOCKS.AIR || type === BLOCKS.DOOR) continue;
+                    if (type === BLOCKS.AIR || type === BLOCKS.DOOR || type === BLOCKS.TORCH) continue;
 
                     const bInfo = BLOCK_TILES[type];
                     const isWater = (type === BLOCKS.WATER);
@@ -3076,6 +3511,21 @@ export class MinecraftEngine {
                 }
             }
 
+            if (this.torchMeshes) {
+                for (let [key, torchObj] of this.torchMeshes.entries()) {
+                    const [tx, ty, tz] = key.split(',').map(Number);
+                    const distSq = (tx - this.position.x) ** 2 + (ty - this.position.y) ** 2 + (tz - this.position.z) ** 2;
+                    if (distSq <= 64.0 && torchObj.group) {
+                        torchObj.group.traverse(child => {
+                            if (child.isMesh) {
+                                child.userData.torchKey = key;
+                                allMeshes.push(child);
+                            }
+                        });
+                    }
+                }
+            }
+
             for (let [key, doorObj] of this.doorMeshes.entries()) {
                 const [dx, dy, dz] = key.split(',').map(Number);
                 const distSq = (dx - this.position.x) ** 2 + (dy - this.position.y) ** 2 + (dz - this.position.z) ** 2;
@@ -3093,6 +3543,18 @@ export class MinecraftEngine {
 
             if (intersects.length > 0 && intersects[0].distance <= 5.5) {
                 const hit = intersects[0];
+
+                if (hit.object.userData && hit.object.userData.torchKey) {
+                    const key = hit.object.userData.torchKey;
+                    const [bx, by, bz] = key.split(',').map(Number);
+                    return {
+                        breakPos: new THREE.Vector3(bx, by, bz),
+                        placePos: new THREE.Vector3(bx, by, bz),
+                        face: hit.face,
+                        isTorch: true,
+                        torchKey: key
+                    };
+                }
 
                 if (hit.object.userData && hit.object.userData.doorKey) {
                     const key = hit.object.userData.doorKey;
@@ -3172,7 +3634,15 @@ export class MinecraftEngine {
         if (type !== BLOCKS.AIR && type !== BLOCKS.WATER && !BLOCK_TILES[type]?.unbreakable) {
             if (type === BLOCKS.DOOR) {
                 this.removeDoorMesh(bx, by, bz);
+                this.removeTorchMesh(bx, by, bz);
             }
+            if (type === BLOCKS.MOB_SPAWNER) {
+                this.spawnDroppedItem(bx + 0.5, by + 0.5, bz + 0.5, BLOCKS.ELEMENTAL_CORE, 1);
+                this.spawnDroppedItem(bx + 0.5, by + 0.5, bz + 0.5, BLOCKS.IRON_INGOT, 2);
+                const key = `${bx},${by},${bz}`;
+                if (this.spawnerData) this.spawnerData.delete(key);
+            }
+
 
             const key = `${bx},${by},${bz}`;
             if (type === BLOCKS.FURNACE && this.furnaceData.has(key)) {
@@ -3200,6 +3670,10 @@ export class MinecraftEngine {
 
             this.setBlockModified(bx, by, bz, BLOCKS.AIR);
             this.sound.playBreak(type);
+            
+            // Reduce tool durability
+            this.reduceItemDurability(this.selectedSlot, 1);
+
 
             let dropType = (type === BLOCKS.STONE) ? BLOCKS.COBBLE : type;
             this.spawnDroppedItem(bx + 0.5, by + 0.3, bz + 0.5, dropType, 1);
@@ -3251,6 +3725,7 @@ export class MinecraftEngine {
                 this.network.sendHitPlayer(target.remotePlayerId, damage, { x: dir.x, z: dir.z });
                 this.particleSystem.createMobHitParticles(this.position.x, this.position.y, this.position.z);
                 this.notify("⚔️ Atacou outro jogador!");
+                this.reduceItemDurability(this.selectedSlot, 1);
                 return;
             }
 
@@ -3260,6 +3735,7 @@ export class MinecraftEngine {
                 if (item && BLOCK_TILES[item.id]?.toolType === 'sword') {
                     this.notify("⚔ Ataque crítico com a Espada!");
                 }
+                this.reduceItemDurability(this.selectedSlot, 1);
                 return;
             }
 
@@ -3590,6 +4066,25 @@ export class MinecraftEngine {
                 }
 
                 this.blockRotations.set(`${px},${py},${pz}`, frontDir);
+            }
+
+            if (item.id === BLOCKS.TORCH) {
+                let dirCode = 0;
+                if (target && target.face && target.face.normal) {
+                    const norm = target.face.normal;
+
+                    // Inversão corrigida: a face da parede onde você clica define onde a base se fixa
+                    if (norm.x > 0.5) dirCode = 1;       // Parede a Oeste (X=0) -> Base em X=0.12, chama aponta para +X
+                    else if (norm.x < -0.5) dirCode = 2; // Parede a Leste (X=1) -> Base em X=0.88, chama aponta para -X
+                    else if (norm.z > 0.5) dirCode = 3;  // Parede a Sul (Z=0)   -> Base em Z=0.12, chama aponta para +Z
+                    else if (norm.z < -0.5) dirCode = 4; // Parede a Norte (Z=1) -> Base em Z=0.88, chama aponta para -Z
+                    else dirCode = 0;                    // Chão (+Y)
+                }
+
+                if (!window.TorchDirMemory) window.TorchDirMemory = new Map();
+                window.TorchDirMemory.set(`${px},${py},${pz}`, dirCode);
+                this.createTorchMesh(px, py, pz, dirCode);
+                if (this.network) this.network.sendBlock(px, py, pz, item.id, dirCode);
             }
 
             if (item.id === BLOCKS.DOOR) {
@@ -4120,6 +4615,7 @@ export class MinecraftEngine {
             this.particleSystem.update(delta);
             this.weatherSystem.update(delta, this.position, this.currentWeather);
             this.updateFurnaces(delta);
+            this.updateSpawners(delta);
             this.updateWaterFlow(delta);
             this.processPendingRemoteRebuilds();
 

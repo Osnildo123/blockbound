@@ -35,6 +35,7 @@ export class TextureAtlasGenerator {
             });
         };
 
+        // --- LINHA 0 ---
         drawTile(0, 0, (c) => {
             c.fillStyle = '#55a02c'; c.fillRect(0, 0, 16, 16);
             for (let i = 0; i < 40; i++) {
@@ -98,6 +99,7 @@ export class TextureAtlasGenerator {
             }
         });
 
+        // --- LINHA 1 ---
         drawTile(0, 1, (c) => {
             c.fillStyle = '#b8945f'; c.fillRect(0, 0, 16, 16);
             c.fillStyle = '#8f6f43';
@@ -145,6 +147,7 @@ export class TextureAtlasGenerator {
             c.fillStyle = '#ffffff'; c.fillRect(7, 3, 2, 2);
         });
 
+        // --- LINHA 2 ---
         drawTile(0, 2, (c) => {
             c.fillStyle = '#5a5a5a'; c.fillRect(1, 12, 14, 4);
             c.fillStyle = '#675231'; c.fillRect(2, 8, 12, 4);
@@ -175,6 +178,7 @@ export class TextureAtlasGenerator {
         drawOreTile(6, 2, '#facc15');
         drawOreTile(7, 2, '#38bdf8');
 
+        // --- LINHA 3 ---
         drawToolTile(0, 3, 'sword', '#cbd5e1');
         drawToolTile(1, 3, 'axe', '#94a3b8');
         drawToolTile(2, 3, 'pickaxe', '#06b6d4');
@@ -202,6 +206,7 @@ export class TextureAtlasGenerator {
             c.fillStyle = '#facc15'; c.fillRect(7, 5, 2, 3);
         });
 
+        // --- LINHA 4 ---
         drawTile(0, 4, (c) => {
             c.strokeStyle = '#675231'; c.lineWidth = 2; c.beginPath(); c.arc(8, 8, 6, -1.2, 1.2); c.stroke();
             c.strokeStyle = '#ffffff'; c.lineWidth = 1; c.beginPath(); c.moveTo(8, 2); c.lineTo(8, 14); c.stroke();
@@ -229,6 +234,66 @@ export class TextureAtlasGenerator {
             c.fillStyle = '#334155'; c.fillRect(5, 4, 3, 4);
             c.fillStyle = '#ffaa00'; c.fillRect(5, 2, 2, 2);
         });
+
+        // --- GERADOR DE MONSTROS (SPAWNER) [7, 4] ---
+        drawTile(7, 4, (c) => {
+            c.fillStyle = '#111827';
+            c.fillRect(0, 0, 16, 16);
+            c.fillStyle = '#06b6d4';
+            c.fillRect(5, 5, 6, 6);
+            c.fillStyle = '#38bdf8';
+            c.fillRect(6, 6, 4, 4);
+            c.strokeStyle = '#374151';
+            c.lineWidth = 1;
+            c.strokeRect(0.5, 0.5, 15, 15);
+            c.fillStyle = '#4b5563';
+            for (let i = 2; i < 16; i += 4) {
+                c.fillRect(i, 0, 1, 16);
+                c.fillRect(0, i, 16, 1);
+            }
+        });
+
+        // --- LINHA 5 ---
+        // Tijolo de Pedra [3, 5]
+        drawTile(3, 5, (c) => {
+            c.fillStyle = '#616161';
+            c.fillRect(0, 0, 16, 16);
+            c.fillStyle = '#373737';
+            c.fillRect(0, 3, 16, 1);
+            c.fillRect(0, 7, 16, 1);
+            c.fillRect(0, 11, 16, 1);
+            c.fillRect(0, 15, 16, 1);
+            c.fillRect(7, 0, 1, 3);
+            c.fillRect(15, 0, 1, 3);
+            c.fillRect(3, 4, 1, 3);
+            c.fillRect(11, 4, 1, 3);
+            c.fillRect(7, 8, 1, 3);
+            c.fillRect(15, 8, 1, 3);
+            c.fillRect(3, 12, 1, 3);
+            c.fillRect(11, 12, 1, 3);
+        });
+
+        // --- FERRAMENTAS E ARMAS ---
+        // Linha 6: Picaretas (0-4) e Machados (5-7)
+        drawToolTile(0, 6, 'pickaxe', '#b8945f'); // Picareta de Madeira
+        drawToolTile(1, 6, 'pickaxe', '#737373'); // Picareta de Pedra
+        drawToolTile(2, 6, 'pickaxe', '#cbd5e1'); // Picareta de Ferro
+        drawToolTile(3, 6, 'pickaxe', '#facc15'); // Picareta de Ouro
+        drawToolTile(4, 6, 'pickaxe', '#38bdf8'); // Picareta de Diamante
+
+        drawToolTile(5, 6, 'axe', '#b8945f');     // Machado de Madeira
+        drawToolTile(6, 6, 'axe', '#737373');     // Machado de Pedra
+        drawToolTile(7, 6, 'axe', '#cbd5e1');     // Machado de Ferro
+
+        // Linha 7: Machados (0-1) e Espadas (2-6)
+        drawToolTile(0, 7, 'axe', '#facc15');     // Machado de Ouro
+        drawToolTile(1, 7, 'axe', '#38bdf8');     // Machado de Diamante
+
+        drawToolTile(2, 7, 'sword', '#b8945f');   // Espada de Madeira
+        drawToolTile(3, 7, 'sword', '#737373');   // Espada de Pedra
+        drawToolTile(4, 7, 'sword', '#cbd5e1');   // Espada de Ferro
+        drawToolTile(5, 7, 'sword', '#facc15');   // Espada de Ouro
+        drawToolTile(6, 7, 'sword', '#38bdf8');   // Espada de Diamante
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;

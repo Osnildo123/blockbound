@@ -701,65 +701,74 @@ export class VoxelMob {
     }
 
     update(delta) {
-        if (!this.mesh) return;
+    if (!this.mesh) return;
 
-        if (this.immunityTimer > 0) {
-            this.immunityTimer -= delta;
+    if (this.immunityTimer > 0) {
+        this.immunityTimer -= delta;
+    }
+
+    const isClientLAN = this.game.network && !this.game.network.isHost && this.game.network.netConn && this.game.network.netConn.open;
+
+    // Animação de caminhada das pernas
+    this.walkTimer += delta * 8.0;
+    const swing = Math.sin(this.walkTimer) * 0.4;
+    if (this.legs && this.legs.length > 0) {
+        this.legs.forEach((leg, i) => {
+            leg.rotation.x = (i % 2 === 0 ? swing : -swing);
+        });
+    }
+
+    // LÓGICA VISUAL E PISCAR DO CREEPER
+    if (this.type === 'creeper') {
+        if (this.fuseTimer > 0) {
+            if (!this.hasPlayedFuseSound) {
+                this.playFuseSound();
+                this.hasPlayedFuseSound = true;
+            }
+
+            const progress = Math.min(1.0, this.fuseTimer / this.fuseMax);
+            const scaleXZ = 1.0 + progress * 0.45;
+            const scaleY = 1.0 + progress * 0.35;
+            this.mesh.scale.set(scaleXZ, scaleY, scaleXZ);
+
+            if (Math.floor(this.fuseTimer * 10) % 2 === 0) {
+                this.setMeshColor(0xffffff);
+            } else {
+                this.setMeshColor(0x2e8b57);
+            }
+        } else {
+            this.mesh.scale.set(1, 1, 1);
+            this.setMeshColor(0x2e8b57);
+            this.hasPlayedFuseSound = false;
         }
+    }
 
-        const isClientLAN = this.game.network && !this.game.network.isHost && this.game.network.netConn && this.game.network.netConn.open;
+    if (isClientLAN) return;
 
-        this.walkTimer += delta * 8.0;
-        const swing = Math.sin(this.walkTimer) * 0.4;
-        if (this.legs && this.legs.length > 0) {
-            this.legs.forEach((leg, i) => {
-                leg.rotation.x = (i % 2 === 0 ? swing : -swing);
-            });
-        }
+    if (this.isHostile) {
+        const target = this.getNearestPlayer();
+        this.attackCooldown = Math.max(0, this.attackCooldown - delta);
 
-        // FUSÍVEL DO CREEPER
+        // Distância de visão e caça expandida para 40 blocos
+        const CHASE_RANGE = 40.0;
+
+        // --- COMPORTAMENTO DO CREEPER ---
         if (this.type === 'creeper') {
-            if (this.fuseTimer > 0) {
-                if (!this.hasPlayedFuseSound) {
-                    this.playFuseSound();
-                    this.hasPlayedFuseSound = true;
-                }
-
-                const progress = Math.min(1.0, this.fuseTimer / this.fuseMax);
-                const scaleXZ = 1.0 + progress * 0.45;
-                const scaleY = 1.0 + progress * 0.35;
-                this.mesh.scale.set(scaleXZ, scaleY, scaleXZ);
-
-                if (Math.floor(this.fuseTimer * 10) % 2 === 0) {
-                    this.setMeshColor(0xffffff);
-                } else {
-                    this.setMeshColor(0x2e8b57);
+            if (target.dist < 3.2) {
+                // Pára para explodir quando próximo
+                this.fuseTimer += delta;
+                if (this.fuseTimer >= this.fuseMax) {
+                    this.explode();
+                    return;
                 }
             } else {
-                this.mesh.scale.set(1, 1, 1);
-                this.setMeshColor(0x2e8b57);
-                this.hasPlayedFuseSound = false;
-            }
-        }
+                // Se o jogador se afastar, o fusível resfria
+                if (this.fuseTimer > 0) {
+                    this.fuseTimer = Math.max(0, this.fuseTimer - delta * 2.0);
+                }
 
-        if (isClientLAN) return;
-
-        if (this.isHostile) {
-            const target = this.getNearestPlayer();
-            this.attackCooldown = Math.max(0, this.attackCooldown - delta);
-
-            if (this.type === 'creeper') {
-                if (target.dist < 3.8) {
-                    this.fuseTimer += delta;
-                    if (this.fuseTimer >= this.fuseMax) {
-                        this.explode();
-                        return;
-                    }
-                } else {
-                    if (this.fuseTimer > 0) {
-                        this.fuseTimer = Math.max(0, this.fuseTimer - delta * 2.0);
-                    }
-
+                // Persegue o jogador a até 40 blocos de distância
+                if (target.dist < CHASE_RANGE) {
                     const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
                     dir.y = 0;
                     if (dir.lengthSq() > 0.001) {
@@ -767,120 +776,137 @@ export class VoxelMob {
                         this.rotation = Math.atan2(dir.x, dir.z);
                         this.mesh.rotation.y = this.rotation;
 
-                        const nextX = this.mesh.position.x + dir.x * 2.8 * delta;
-                        const nextZ = this.mesh.position.z + dir.z * 2.8 * delta;
-                        const groundY = this.game.getHighestBlockY(nextX, nextZ);
-                        const realY = Math.max(groundY + 1, 12.0);
-                        this.mesh.position.set(nextX, realY, nextZ);
-                    }
-                }
-            } 
-            else if (this.type === 'skeleton') {
-                if (target.dist < 20) {
-                    const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
-                    const flatDir = new THREE.Vector3(dir.x, 0, dir.z);
-
-                    if (flatDir.lengthSq() > 0.001) {
-                        flatDir.normalize();
-                        this.rotation = Math.atan2(flatDir.x, flatDir.z);
-                        this.mesh.rotation.y = this.rotation;
-
-                        let moveSpeed = 0;
-                        if (target.dist > 13) moveSpeed = 2.4;
-                        else if (target.dist < 7) moveSpeed = -1.8;
-
-                        if (moveSpeed !== 0) {
-                            const nextX = this.mesh.position.x + flatDir.x * moveSpeed * delta;
-                            const nextZ = this.mesh.position.z + flatDir.z * moveSpeed * delta;
-                            const groundY = this.game.getHighestBlockY(nextX, nextZ);
-                            const realY = Math.max(groundY + 1, 12.0);
-                            this.mesh.position.set(nextX, realY, nextZ);
-                        }
-                    }
-
-                    if (this.attackCooldown <= 0 && target.dist < 18) {
-                        this.attackCooldown = 2.2;
-                        this.immunityTimer = 0.3;
-
-                        const targetY = target.pos.y + 0.5;
-                        const shootDir = new THREE.Vector3(
-                            target.pos.x - this.mesh.position.x + (Math.random() - 0.5) * 0.4,
-                            targetY - (this.mesh.position.y + 1.2) + (Math.random() - 0.5) * 0.2,
-                            target.pos.z - this.mesh.position.z + (Math.random() - 0.5) * 0.4
-                        ).normalize();
-
-                        const offset = 1.5;
-                        const spawnX = this.mesh.position.x + shootDir.x * offset;
-                        const spawnY = this.mesh.position.y + 1.2 + shootDir.y * offset;
-                        const spawnZ = this.mesh.position.z + shootDir.z * offset;
-
-                        if (typeof this.game.spawnArrow === 'function') {
-                            this.game.spawnArrow(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
-                        } else if (typeof this.game.spawnArrowFromNetwork === 'function') {
-                            this.game.spawnArrowFromNetwork(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
-                        }
-
-                        if (this.game.network) {
-                            this.game.network.sendShootArrow(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
-                        }
-
-                        if (this.game.sound && typeof this.game.sound.playShoot === 'function') {
-                            this.game.sound.playShoot();
-                        }
-                    }
-                }
-            } 
-            else {
-                if (target.dist < 18) {
-                    const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
-                    dir.y = 0;
-
-                    if (dir.lengthSq() > 0.001) {
-                        dir.normalize();
-                        this.rotation = Math.atan2(dir.x, dir.z);
-                        this.mesh.rotation.y = this.rotation;
-
-                        const speed = 4.2;
+                        const speed = 2.8;
                         const nextX = this.mesh.position.x + dir.x * speed * delta;
                         const nextZ = this.mesh.position.z + dir.z * speed * delta;
 
+                        // Segue o relevo do terreno suavemente sem flutuar
                         const groundY = this.game.getHighestBlockY(nextX, nextZ);
-                        const realY = Math.max(groundY + 1, 12.0);
-                        this.mesh.position.set(nextX, realY, nextZ);
-                    }
+                        const targetY = Math.max(groundY + 1, 12.0);
 
-                    if (target.dist < 1.8 && this.attackCooldown <= 0) {
-                        this.attackCooldown = 1.2;
-                        const damage = 12;
-                        const knockback = { x: dir.x, z: dir.z };
-
-                        if (target.isClient) {
-                            this.game.network.sendHitPlayer(target.peerId, damage, knockback);
-                        } else {
-                            this.game.takePlayerDamage(damage, this.type.toUpperCase(), knockback);
-                        }
+                        this.mesh.position.x = nextX;
+                        this.mesh.position.z = nextZ;
+                        this.mesh.position.y += (targetY - this.mesh.position.y) * Math.min(1.0, delta * 10.0);
                     }
                 }
             }
-        } else {
-            // MOVIMENTAÇÃO DE ANIMAIS PASSIVOS
-            if (Math.random() < 0.01) {
-                this.rotation += (Math.random() - 0.5) * 1.5;
-                this.mesh.rotation.y = this.rotation;
+        } 
+        // --- COMPORTAMENTO DO ESQUELETO ---
+        else if (this.type === 'skeleton') {
+            if (target.dist < CHASE_RANGE) {
+                const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
+                const flatDir = new THREE.Vector3(dir.x, 0, dir.z);
+
+                if (flatDir.lengthSq() > 0.001) {
+                    flatDir.normalize();
+                    this.rotation = Math.atan2(flatDir.x, flatDir.z);
+                    this.mesh.rotation.y = this.rotation;
+
+                    let moveSpeed = 0;
+                    if (target.dist > 14) moveSpeed = 2.6;       // Aproxima-se se estiver longe
+                    else if (target.dist < 6) moveSpeed = -1.8;  // Recua se o jogador chegar muito perto
+
+                    if (moveSpeed !== 0) {
+                        const nextX = this.mesh.position.x + flatDir.x * moveSpeed * delta;
+                        const nextZ = this.mesh.position.z + flatDir.z * moveSpeed * delta;
+
+                        const groundY = this.game.getHighestBlockY(nextX, nextZ);
+                        const targetY = Math.max(groundY + 1, 12.0);
+
+                        this.mesh.position.x = nextX;
+                        this.mesh.position.z = nextZ;
+                        this.mesh.position.y += (targetY - this.mesh.position.y) * Math.min(1.0, delta * 10.0);
+                    }
+                }
+
+                // Atira flechas quando dentro do alcance de tiro (22 blocos)
+                if (this.attackCooldown <= 0 && target.dist < 22.0) {
+                    this.attackCooldown = 2.2;
+                    this.immunityTimer = 0.3;
+
+                    const targetY = target.pos.y + 0.5;
+                    const shootDir = new THREE.Vector3(
+                        target.pos.x - this.mesh.position.x + (Math.random() - 0.5) * 0.3,
+                        targetY - (this.mesh.position.y + 1.2) + (Math.random() - 0.5) * 0.2,
+                        target.pos.z - this.mesh.position.z + (Math.random() - 0.5) * 0.3
+                    ).normalize();
+
+                    const offset = 1.5;
+                    const spawnX = this.mesh.position.x + shootDir.x * offset;
+                    const spawnY = this.mesh.position.y + 1.2 + shootDir.y * offset;
+                    const spawnZ = this.mesh.position.z + shootDir.z * offset;
+
+                    if (typeof this.game.spawnArrow === 'function') {
+                        this.game.spawnArrow(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
+                    } else if (typeof this.game.spawnArrowFromNetwork === 'function') {
+                        this.game.spawnArrowFromNetwork(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
+                    }
+
+                    if (this.game.network) {
+                        this.game.network.sendShootArrow(spawnX, spawnY, spawnZ, shootDir.x, shootDir.y, shootDir.z, this.id);
+                    }
+
+                    if (this.game.sound && typeof this.game.sound.playShoot === 'function') {
+                        this.game.sound.playShoot();
+                    }
+                }
             }
-            const dirX = Math.sin(this.rotation);
-            const dirZ = Math.cos(this.rotation);
-            const nextX = this.mesh.position.x + dirX * 0.8 * delta;
-            const nextZ = this.mesh.position.z + dirZ * 0.8 * delta;
+        } 
+        // --- ARANHAS E OUTROS INIMIGOS ---
+        else {
+            if (target.dist < CHASE_RANGE) {
+                const dir = new THREE.Vector3().subVectors(target.pos, this.mesh.position);
+                dir.y = 0;
 
-            const groundY = this.game.getHighestBlockY(nextX, nextZ);
+                if (dir.lengthSq() > 0.001) {
+                    dir.normalize();
+                    this.rotation = Math.atan2(dir.x, dir.z);
+                    this.mesh.rotation.y = this.rotation;
 
-            if (groundY <= 11) {
-                this.rotation += Math.PI * (0.8 + Math.random() * 0.4);
-                this.mesh.rotation.y = this.rotation;
-            } else {
-                this.mesh.position.set(nextX, groundY + 1, nextZ);
+                    const speed = 4.2;
+                    const nextX = this.mesh.position.x + dir.x * speed * delta;
+                    const nextZ = this.mesh.position.z + dir.z * speed * delta;
+
+                    const groundY = this.game.getHighestBlockY(nextX, nextZ);
+                    const targetY = Math.max(groundY + 1, 12.0);
+
+                    this.mesh.position.x = nextX;
+                    this.mesh.position.z = nextZ;
+                    this.mesh.position.y += (targetY - this.mesh.position.y) * Math.min(1.0, delta * 10.0);
+                }
+
+                if (target.dist < 1.8 && this.attackCooldown <= 0) {
+                    this.attackCooldown = 1.2;
+                    const damage = 12;
+                    const knockback = { x: dir.x, z: dir.z };
+
+                    if (target.isClient) {
+                        this.game.network.sendHitPlayer(target.peerId, damage, knockback);
+                    } else {
+                        this.game.takePlayerDamage(damage, this.type.toUpperCase(), knockback);
+                    }
+                }
             }
         }
+    } else {
+        // MOVIMENTAÇÃO DE ANIMAIS PASSIVOS
+        if (Math.random() < 0.01) {
+            this.rotation += (Math.random() - 0.5) * 1.5;
+            this.mesh.rotation.y = this.rotation;
+        }
+        const dirX = Math.sin(this.rotation);
+        const dirZ = Math.cos(this.rotation);
+        const nextX = this.mesh.position.x + dirX * 0.8 * delta;
+        const nextZ = this.mesh.position.z + dirZ * 0.8 * delta;
+
+        const groundY = this.game.getHighestBlockY(nextX, nextZ);
+
+        if (groundY <= 11) {
+            this.rotation += Math.PI * (0.8 + Math.random() * 0.4);
+            this.mesh.rotation.y = this.rotation;
+        } else {
+            this.mesh.position.set(nextX, groundY + 1, nextZ);
+        }
     }
+}
 }

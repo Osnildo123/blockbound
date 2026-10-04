@@ -21,7 +21,9 @@ export const BLOCKS = {
     IRON_HELMET: 58,
     IRON_CHESTPLATE: 59,
     IRON_LEGGINGS: 60,
-    IRON_BOOTS: 61
+    IRON_BOOTS: 61,
+    STONE_BRICK: 62,
+    MOB_SPAWNER: 63
 };
 
 export const BLOCK_TILES = {
@@ -47,11 +49,11 @@ export const BLOCK_TILES = {
     20: { name: 'Minério de Ferro', top: [5,2], side: [5,2], bottom: [5,2] },
     21: { name: 'Minério de Ouro', top: [6,2], side: [6,2], bottom: [6,2] },
     22: { name: 'Minério de Diamante', top: [7,2], side: [7,2], bottom: [7,2] },
-    23: { name: 'Espada de Ferro', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 5, toolSpeed: 5.5 },
-    24: { name: 'Machado de Ferro', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 5.5 },
+    23: { name: 'Espada de Ferro', top: [4,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 5, toolSpeed: 8.0 },
+    24: { name: 'Machado de Ferro', top: [7,6], plant: true, isTool: true, toolType: 'axe', toolSpeed: 8.0 },
     25: { name: 'Núcleo Elementar', top: [2,3], plant: true, isTool: true },
     26: { name: 'Totem Repelente', top: [3,3], plant: true, light: true, isTotem: true },
-    27: { name: 'Picareta de Ferro', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 5.5 },
+    27: { name: 'Picareta de Ferro', top: [2,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 8.0 },
     28: { name: 'Vidro', top: [5,3], side: [5,3], bottom: [5,3], transparent: true },
     29: { name: 'Porta', top: [6,3], side: [6,3], bottom: [6,3], isDoor: true, transparent: true },
     30: { name: 'Baú', top: [7,3], side: [7,3], bottom: [7,3], isChest: true },
@@ -61,23 +63,23 @@ export const BLOCK_TILES = {
     34: { name: 'Cacto', top: [3,4], side: [3,4], bottom: [3,4], transparent: true },
     35: { name: 'Isqueiro', top: [4,4], plant: true, isTool: true },
 
-    36: { name: 'Picareta de Madeira', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 2.0 },
-    37: { name: 'Picareta de Pedra', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 3.5 },
-    38: { name: 'Picareta de Ferro', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 5.5 },
-    39: { name: 'Picareta de Ouro', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 8.0 },
-    40: { name: 'Picareta de Diamante', top: [4,3], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 10.0 },
+    36: { name: 'Picareta de Madeira', top: [0,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 3.5 },
+    37: { name: 'Picareta de Pedra', top: [1,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 5.5 },
+    38: { name: 'Picareta de Ferro', top: [2,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 8.0 },
+    39: { name: 'Picareta de Ouro', top: [3,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 12.0 },
+    40: { name: 'Picareta de Diamante', top: [4,6], plant: true, isTool: true, toolType: 'pickaxe', toolSpeed: 16.0 },
 
-    41: { name: 'Machado de Madeira', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 2.0 },
-    42: { name: 'Machado de Pedra', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 3.5 },
-    43: { name: 'Machado de Ferro', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 5.5 },
-    44: { name: 'Machado de Ouro', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 8.0 },
-    45: { name: 'Machado de Diamante', top: [1,3], plant: true, isTool: true, toolType: 'axe', toolSpeed: 10.0 },
+    41: { name: 'Machado de Madeira', top: [5,6], plant: true, isTool: true, toolType: 'axe', toolSpeed: 3.5 },
+    42: { name: 'Machado de Pedra', top: [6,6], plant: true, isTool: true, toolType: 'axe', toolSpeed: 5.5 },
+    43: { name: 'Machado de Ferro', top: [7,6], plant: true, isTool: true, toolType: 'axe', toolSpeed: 8.0 },
+    44: { name: 'Machado de Ouro', top: [0,7], plant: true, isTool: true, toolType: 'axe', toolSpeed: 12.0 },
+    45: { name: 'Machado de Diamante', top: [1,7], plant: true, isTool: true, toolType: 'axe', toolSpeed: 16.0 },
 
-    46: { name: 'Espada de Madeira', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 2, toolSpeed: 2.0 },
-    47: { name: 'Espada de Pedra', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 3, toolSpeed: 3.5 },
-    48: { name: 'Espada de Ferro', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 5, toolSpeed: 5.5 },
-    49: { name: 'Espada de Ouro', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 4, toolSpeed: 8.0 },
-    50: { name: 'Espada de Diamante', top: [0,3], plant: true, isTool: true, toolType: 'sword', toolDamage: 8, toolSpeed: 10.0 },
+    46: { name: 'Espada de Madeira', top: [2,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 2, toolSpeed: 3.5 },
+    47: { name: 'Espada de Pedra', top: [3,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 3, toolSpeed: 5.5 },
+    48: { name: 'Espada de Ferro', top: [4,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 5, toolSpeed: 8.0 },
+    49: { name: 'Espada de Ouro', top: [5,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 4, toolSpeed: 12.0 },
+    50: { name: 'Espada de Diamante', top: [6,7], plant: true, isTool: true, toolType: 'sword', toolDamage: 8, toolSpeed: 16.0 },
     
     51: { 
         name: 'Mesa de Trabalho', 
@@ -104,14 +106,16 @@ export const BLOCK_TILES = {
     58: { name: 'Capacete de Ferro', top: [4, 5], plant: true, isArmor: true, armorType: 'head', defense: 3 },
     59: { name: 'Peitoral de Ferro', top: [5, 5], plant: true, isArmor: true, armorType: 'chest', defense: 8 },
     60: { name: 'Calças de Ferro', top: [6, 5], plant: true, isArmor: true, armorType: 'legs', defense: 6 },
-    61: { name: 'Botas de Ferro', top: [7, 5], plant: true, isArmor: true, armorType: 'feet', defense: 3 }
+    61: { name: 'Botas de Ferro', top: [7, 5], plant: true, isArmor: true, armorType: 'feet', defense: 3 },
+    62: { name: 'Tijolo de Pedra', top: [3, 5], side: [3, 5], bottom: [3, 5] },
+    63: { name: 'Gerador de Monstros', top: [7, 4], side: [7, 4], bottom: [7, 4], transparent: true, isSpawner: true, light: true }
 };
 
 export const BLOCK_PARTICLE_COLORS = {
     1: 0x55a02c, 2: 0x866043, 3: 0x737373, 4: 0x675231, 5: 0x2d7a1e, 6: 0xdbd3a2,
     7: 0xb8945f, 12: 0x333333, 13: 0x5a5a5a, 19: 0x1e1e1e, 20: 0xd89c74, 21: 0xfacc15,
     22: 0x38bdf8, 28: 0xbae6fd, 29: 0x8f6f43, 30: 0x8b5a2b, 32: 0xf8fafc, 33: 0x38bdf8, 34: 0x15803d,
-    52: 0x5a5a5a, 53: 0xd89c74, 57: 0xff4500
+    52: 0x5a5a5a, 53: 0xd89c74, 57: 0xff4500, 62: 0x616161, 63: 0x06b6d4
 };
 
 export function isTransparentBlock(id) {
